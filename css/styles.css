@@ -74,7 +74,9 @@ main {
 .egg img {
     max-height: 30vh;
     width: auto;
-    filter: drop-shadow(0 10px 15px rgba(0, 0, 0, 0.5));
+    filter: drop-shadow(0 10px 15px rgba(0, 0, 0, 0.5))
+            drop-shadow(0 0 10px rgba(255, 255, 255, 0.2));
+    animation: eggPulse 4s ease-in-out infinite;
 }
 
 .egg:hover, .egg:focus {
@@ -106,6 +108,19 @@ main {
 @keyframes textFade {
     from { opacity: 0; }
     to { opacity: 1; }
+}
+
+@keyframes eggPulse {
+    0%, 100% {
+        transform: scale(1);
+        filter: drop-shadow(0 10px 15px rgba(0, 0, 0, 0.5))
+                drop-shadow(0 0 10px rgba(255, 255, 255, 0.2));
+    }
+    50% {
+        transform: scale(1.05);
+        filter: drop-shadow(0 10px 15px rgba(0, 0, 0, 0.5))
+                drop-shadow(0 0 20px rgba(255, 255, 255, 0.4));
+    }
 }
 
 /* Responsive adjustments */
@@ -151,6 +166,9 @@ main {
     .text-transition {
         animation: none;
         transition: none;
+    }
+    .egg img {
+        animation: none;
     }
 }
 
