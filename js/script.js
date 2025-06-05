@@ -17,6 +17,7 @@
   egg.addEventListener('click', updateMessage);
   egg.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault();
       updateMessage();
     }
   });

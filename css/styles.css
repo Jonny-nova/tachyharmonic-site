@@ -66,6 +66,9 @@ main {
     display: flex;
     justify-content: center;
     align-items: center;
+    background: none;
+    border: none;
+    padding: 0;
 }
 
 .egg img {
@@ -135,5 +138,19 @@ main {
 :focus {
     outline: 1px solid rgba(255, 255, 255, 0.3);
     outline-offset: 3px;
+}
+
+.noscript-message {
+    margin-top: 10px;
+    font-size: 14px;
+    color: #ff8080;
+    text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .text-transition {
+        animation: none;
+        transition: none;
+    }
 }
 
