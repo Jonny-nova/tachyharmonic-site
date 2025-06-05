@@ -126,14 +126,3 @@ main {
     outline-offset: 3px;
 }
 
-/* Animation for text transitions */
-@keyframes fadeInOut {
-    0% { opacity: 0; }
-    20% { opacity: 1; }
-    80% { opacity: 1; }
-    100% { opacity: 0; }
-}
-
-.text-transition {
-    animation: fadeInOut 2s ease;
-}
