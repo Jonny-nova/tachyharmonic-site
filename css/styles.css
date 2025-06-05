@@ -94,6 +94,17 @@ main {
     max-width: 80%;
 }
 
+/* Utility class for fading text in */
+.text-transition {
+    opacity: 0;
+    animation: textFade 0.5s ease-in forwards;
+}
+
+@keyframes textFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .egg img {
