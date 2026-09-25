@@ -2,7 +2,7 @@
 
 Status: local rule implementation and architecture proposal only. No booking endpoint, payment flow, provider credentials, or live integration has been deployed.
 
-Authority: the supplied BOOKING_SYSTEM_SPEC.md, version 1.0, 25 September 2026. SHA-256 at implementation: DAADB40EFA00CD298EA71C14A9BE1D06C1D4BA96CA0B75031E55E2CD9A90DEC3. Keep that source authoritative if this note differs from it.
+Authority: [docs/BOOKING_SYSTEM_SPEC.md](docs/BOOKING_SYSTEM_SPEC.md), version 1.0, 25 September 2026. SHA-256 at implementation: DAADB40EFA00CD298EA71C14A9BE1D06C1D4BA96CA0B75031E55E2CD9A90DEC3. Keep that source authoritative if this note differs from it.
 
 ## Current website audit
 
@@ -80,6 +80,6 @@ For a cross-week reschedule, check the destination week before committing, then 
 
 ## Test plan and evidence
 
-The local suite in booking/booking.test.js covers all 12 boundary cases in BOOKING_SYSTEM_SPEC.md: initial availability, supported ceiling, repair-capacity examples, third solidarity growth, £500 and £700 full weeks, cancellation, cross-week reschedule, eleventh booking and simultaneous attempts. It also checks BST/GMT week changes, duplicate confirmation, denied reschedule into a full week, invalid inputs, and an exhaustive proof over reachable full-week states.
+The local suite in booking/booking.test.js covers all 12 boundary cases in [docs/BOOKING_SYSTEM_SPEC.md](docs/BOOKING_SYSTEM_SPEC.md): initial availability, supported ceiling, repair-capacity examples, third solidarity growth, £500 and £700 full weeks, cancellation, cross-week reschedule, eleventh booking and simultaneous attempts. It also checks BST/GMT week changes, duplicate confirmation, denied reschedule into a full week, invalid inputs, and an exhaustive proof over reachable full-week states.
 
 Before deployment, add adapter and integration tests for real durable transactions, hold expiry, concurrent Checkout completion, duplicated/out-of-order signed webhooks, provider API failure, reconciliation, payment failure/refund, calendar conflict, native reschedule behaviour, and simultaneous bookings against the deployed service. The local in-memory concurrency test verifies the gate contract, not Cloudflare's production adapter.

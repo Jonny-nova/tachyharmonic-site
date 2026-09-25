@@ -25,7 +25,7 @@ The check validates internal anchors, local resources, the root CNAME, and the b
 
 ## Booking system status
 
-The pricing section explains how supported places grow. The booking calculation and transactional gate contract live in [booking](booking); their architecture and outstanding integration decisions are recorded in [BOOKING_IMPLEMENTATION.md](BOOKING_IMPLEMENTATION.md).
+The authoritative booking rules are in [docs/BOOKING_SYSTEM_SPEC.md](docs/BOOKING_SYSTEM_SPEC.md). The pricing section explains how supported places grow. The booking calculation and transactional gate contract live in [booking](booking); their architecture and outstanding integration decisions are recorded in [BOOKING_IMPLEMENTATION.md](BOOKING_IMPLEMENTATION.md).
 
 The gate is local server-only code. The public form remains a non-submitting preview. No Calendly, Stripe or Google Calendar account is connected by this repository, and no service credentials belong in GitHub Pages JavaScript.
 
