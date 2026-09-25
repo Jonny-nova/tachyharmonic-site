@@ -32,8 +32,8 @@ p:last-child { margin-bottom: 0; }
 
 .site-header { border-bottom: 1px solid var(--line); }
 .header-inner { min-height: 84px; display: flex; align-items: center; gap: 28px; }
-.wordmark { white-space: nowrap; font: 500 31px/.95 var(--font-display); letter-spacing: -.035em; }
-.wordmark-dot { color: var(--accent-text); }
+.wordmark { display: inline-flex; align-items: center; gap: .45em; white-space: nowrap; font: 500 31px/1 var(--font-display); letter-spacing: -.035em; }
+.wordmark-mark { display: block; height: 1em; width: auto; flex: none; }
 .desktop-nav { display: flex; gap: clamp(15px, 2vw, 30px); align-items: center; margin-left: auto; }
 .desktop-nav a, .header-contact { font-size: 14px; font-weight: 500; }
 .desktop-nav a { color: var(--muted); }

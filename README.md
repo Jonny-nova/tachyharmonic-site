@@ -4,6 +4,8 @@ The static website for tachyharmonic.ai, rebuilt from the Tachyharmonic brand sy
 
 The original Jonathan portrait is stored at assets/images/jonathan-portrait.png. The homepage crop is controlled with CSS, so the original remains intact.
 
+The live wordmark uses the approved light SVG mark and Newsreader text. The favicon and mark in public/assets are production copies from the adjacent Brand and Design logo folder. LOGO_SPEC.md there is authoritative for the mark, including the raised solid circle; keep the canonical originals in that folder.
+
 ## Local preview
 
 From this repository, run:
