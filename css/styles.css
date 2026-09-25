@@ -163,6 +163,9 @@ main > section[id] { scroll-margin-top: 84px; }
 .price-item.featured p { color: var(--dark-muted); }
 .price-item strong { display: block; font: 400 57px/1 var(--font-display); letter-spacing: -.03em; margin: 26px 0 20px; }
 .price-item p { color: var(--muted); font-size: 15px; line-height: 1.6; }
+.supported-growth { display: grid; grid-template-columns: .38fr 1fr; gap: clamp(35px, 7vw, 95px); border-block: 1px solid var(--line); padding-block: 30px 34px; margin-top: 35px; }
+.supported-growth h3 { max-width: 270px; font-size: clamp(27px, 2.5vw, 36px); line-height: 1.15; margin-bottom: 0; }
+.supported-growth p { max-width: 720px; color: var(--muted); font-size: 16px; line-height: 1.65; margin-bottom: 13px; }
 .pricing-note { max-width: 720px; margin-top: 25px; color: var(--muted); font-size: 14px; }
 
 .faq-section { background: var(--surface); border-block: 1px solid var(--line); }
@@ -249,6 +252,7 @@ main > section[id] { scroll-margin-top: 84px; }
   .price-grid { grid-template-columns: 1fr; }
   .price-item { min-height: 0; border-right: 0; border-bottom: 1px solid var(--line); }
   .price-item:last-child { border-bottom: 0; }
+  .supported-growth { grid-template-columns: 1fr; gap: 15px; }
   .contact-inner { gap: 37px; }
 }
 @media (max-width: 520px) {

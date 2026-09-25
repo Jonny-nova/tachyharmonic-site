@@ -21,7 +21,13 @@ The intake form is a visual and interaction preview. It does not send or save an
     npm ci
     npm test
 
-The check validates internal anchors, local resources, and the root CNAME.
+The check validates internal anchors, local resources, the root CNAME, and the booking-rule boundary cases.
+
+## Booking system status
+
+The pricing section explains how supported places grow. The booking calculation and transactional gate contract live in [booking](booking); their architecture and outstanding integration decisions are recorded in [BOOKING_IMPLEMENTATION.md](BOOKING_IMPLEMENTATION.md).
+
+The gate is local server-only code. The public form remains a non-submitting preview. No Calendly, Stripe or Google Calendar account is connected by this repository, and no service credentials belong in GitHub Pages JavaScript.
 
 ## Publishing
 

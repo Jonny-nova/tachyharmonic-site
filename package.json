@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Tachyharmonic static website",
   "scripts": {
-    "test": "node check-resources.js"
+    "test": "node check-resources.js && node --test booking/booking.test.js"
   },
   "keywords": [],
   "author": "",
