@@ -19,16 +19,24 @@ if (!/<main\b/.test(html) || !/<nav\b/.test(html) || !/<h1\b/.test(html)) {
 for (const image of html.matchAll(/<img\b[^>]*>/g)) {
   if (!/\balt="[^"]*"/.test(image[0])) errors.push("Image missing alt text");
 }
-for (const [, attribute, value] of html.matchAll(/\b(src|href)="([^"]+)"/g)) {
+function checkResource(attribute, value) {
   if (value.startsWith("#")) {
     if (!ids.has(value.slice(1))) errors.push("Broken anchor: " + value);
-    continue;
+    return;
   }
-  if (/^(https?:|mailto:|tel:|data:)/.test(value)) continue;
+  if (/^(https?:|mailto:|tel:|data:)/.test(value)) return;
   const relativePath = value.split(/[?#]/, 1)[0];
   const filePath = path.resolve(root, relativePath);
   if (!filePath.startsWith(root + path.sep) || !fs.existsSync(filePath)) {
     errors.push("Missing " + attribute + " target: " + value);
+  }
+}
+for (const [, attribute, value] of html.matchAll(/\b(src|href)="([^"]+)"/g)) {
+  checkResource(attribute, value);
+}
+for (const [, value] of html.matchAll(/\bsrcset="([^"]+)"/g)) {
+  for (const candidate of value.split(",")) {
+    checkResource("srcset", candidate.trim().split(/\s+/)[0]);
   }
 }
 
