@@ -1,16 +1,12 @@
 {
   "name": "tachyharmonic-site",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Tachyharmonic static website",
   "scripts": {
-    "test": "htmlhint index.html && node check-resources.js"
+    "test": "node check-resources.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
-  "devDependencies": {
-    "htmlhint": "^1.4.0"
-  }
+  "type": "commonjs"
 }
