@@ -201,6 +201,10 @@ main > section[id] { scroll-margin-top: 84px; }
 .field-meta output { white-space: nowrap; font-family: var(--font-mono); font-size: 12px; }
 .form-privacy, .form-note { color: var(--muted); font-size: 13px; line-height: 1.55; margin: 10px 0 0; }
 .summary-group .form-choice { max-width: 510px; }
+.summary-explainer { margin-top: 17px; }
+.summary-explainer summary { width: fit-content; color: var(--accent-text); border-bottom: 1px solid var(--accent); font-size: 14px; font-weight: 600; cursor: pointer; }
+.summary-explainer-content { max-width: 540px; margin-top: 15px; padding: 15px 18px; border-left: 2px solid var(--accent); background: var(--bg); color: var(--ink); font-size: 14px; line-height: 1.55; }
+.summary-explainer-content p { margin-bottom: 11px; }
 .intake-form .button { margin-top: 31px; }
 .intake-form .button:disabled { cursor: not-allowed; opacity: .67; }
 
