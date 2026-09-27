@@ -41,7 +41,7 @@ class BookingService {
       rate: record.rate, amount: record.rate * 100, currency: "gbp", durationMinutes: offer.durationMinutes,
       status: record.status, expiresAt: record.expiresAt, refundStatus: record.refundStatus || "none", retryPending: !!record.retryPending,
       providerCancelled: !!record.providerCancelled, externalChangePending: !!record.externalChangePending, failureCode: record.failureCode || null,
-      ...(record.status === "confirmed" && record.meetingUrl ? { meetingUrl: record.meetingUrl } : {}) };
+      ...(["confirmed", "review_requested"].includes(record.status) && !record.externalChangePending && record.meetingUrl ? { meetingUrl: record.meetingUrl } : {}) };
   }
   async authorize(id, token) {
     if (!tokenPattern.test(token || "")) throw fail("unauthorized", 401);
@@ -260,6 +260,7 @@ class BookingService {
         if (appointment.state === "conference_failed") { this.queueFailedMeeting(r.id, appointment.appointmentId); return; }
         this.completeConfirmation(r.id, appointment.appointmentId, appointment.meetingUrl);
       } catch (error) {
+        if (error.notDispatched === true) this.store.mutate(state => { state.bookings.find(x => x.id === r.id).creationAttempted = false; });
         if (error.definitive === true) { this.gate.failBooking({ id: r.id, code: "provider_rejected" }); return; }
         throw error;
       }
@@ -289,10 +290,10 @@ class BookingService {
       if (Date.parse(this.now()) - Date.parse(job.firstAttemptAt) > 23 * 3600000) {
         const found = await this.adapters.payments.getRefund({ paymentId: r.paymentId, bookingId: r.id, amount: r.rate * 100 });
         if (found.state !== "found" || ["failed", "canceled"].includes(found.status)) throw fail("refund_manual_reconciliation_required", 503);
-        this.gate.recordRefundInitiated({ id: r.id, refundId: found.refundId }); return;
+        this.recordRefundResult(r.id, found); return;
       }
       const result = await this.adapters.payments.refund({ bookingId: r.id, paymentId: r.paymentId, amount: r.rate * 100, idempotencyKey: job.key });
-      this.gate.recordRefundInitiated({ id: r.id, refundId: result.refundId });
+      this.recordRefundResult(r.id, result);
     } else if (job.kind === "expire") {
       if (r.paymentId || r.checkoutTerminal) return;
       await this.adapters.payments.expireCheckout({ checkoutId: r.checkoutId });
@@ -305,6 +306,20 @@ class BookingService {
         ...(job.kind === "notice_confirmed" ? { consent: secret.consent, contractAt: secret.contractAt, cancellationEndsAt: cancellationEndsAt(secret.contractAt), meetingUrl: r.meetingUrl, contractTerms: secret.contractTerms } : {}),
       });
     }
+  }
+  recordRefundResult(id, result) {
+    this.store.mutate(state => {
+      const gate = new BookingGate({ transact: cb => { const output = cb(state.bookings); state.bookings = output.bookings; return output.result; } });
+      const recorded = gate.recordRefundInitiated({ id, refundId: result.refundId });
+      if (recorded.reason) throw fail(recorded.reason, 409);
+      if (result.status === "requires_action") {
+        const record = state.bookings.find(x => x.id === id);
+        record.refundStatus = "attention_required";
+        record.alertPending = true;
+        enqueue(state, id, "notice_pending", this.now());
+        enqueue(state, id, "notice_alert", this.now());
+      }
+    });
   }
   queueFailedMeeting(id, appointmentId) {
     if (typeof appointmentId !== "string" || !appointmentId) throw fail("provider_identity_required", 503);
@@ -344,7 +359,7 @@ class BookingService {
             const record = state.bookings.find(x => x.id === job.id);
             const unresolved = Object.values(state.jobs).some(j => j.id === job.id && !j.kind.startsWith("notice_") && j.status !== "done" && j.attempts > 0);
             record.retryPending = unresolved;
-            record.alertPending = unresolved || record.externalChangePending || record.status === "review_requested" || record.status === "booking_failed";
+            record.alertPending = unresolved || record.externalChangePending || record.refundStatus === "attention_required" || record.status === "review_requested" || record.status === "booking_failed";
             if (!unresolved) delete record.lastFailureAction;
           }
         });

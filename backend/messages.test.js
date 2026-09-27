@@ -21,6 +21,7 @@ test('failure/pending/refund language never claims completed funds or an appoint
   assert.match(renderMessage({ kind: 'booking_failed', bookingId: 'abc' }).text, /No appointment has been confirmed/);
   assert.match(renderMessage({ kind: 'refund_initiated', bookingId: 'abc' }).text, /does not mean the funds have reached/);
   assert.match(renderMessage({ kind: 'manual_review_received', bookingId: 'abc' }).text, /No cancellation or refund decision/);
+  assert.match(renderMessage({ kind: 'manual_review_received', bookingId: 'abc' }).text, /valid statutory cancellation right/);
   assert.match(renderMessage({ kind: 'cancellation_refund_pending', bookingId: 'abc' }).text, /does not confirm/);
 });
 test('management links are absent unless real secure link supplied', () => {

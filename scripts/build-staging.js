@@ -9,7 +9,7 @@ const origin = "https://tachyharmonic-booking-staging.tachyharmonic-site.workers
 const enabled = process.argv.includes("--enable-test-booking");
 const files = [
   "index.html", "terms.html", "css/styles.css", "css/booking.css",
-  "js/script.js", "js/booking.js", "booking/consent.js",
+  "js/script.js", "js/booking.js", "js/terms.js", "booking/consent.js",
   "public/assets/favicon.svg", "public/assets/tachyharmonic-mark-light.svg",
   "assets/images/jonathan-portrait.png", "assets/images/jonathan-portrait-800.webp",
 ];

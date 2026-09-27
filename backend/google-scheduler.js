@@ -4,7 +4,11 @@
 function createGoogleScheduler({ env, fetcher, googleToken, calendar, ProviderError, now }) {
   const required = (value, code) => { if (typeof value !== 'string' || !value) throw new ProviderError('google', code, true); return value; };
   const instant = value => { const time = Date.parse(value); if (!Number.isFinite(time)) throw new ProviderError('google', 'invalid_time', true); return time; };
-  const calendarId = () => required(env.GOOGLE_BOOKING_CALENDAR || env.GOOGLE_CALENDAR_PRIMARY, 'missing_booking_calendar');
+  const calendarId = () => {
+    const id = required(env.GOOGLE_BOOKING_CALENDAR || env.GOOGLE_CALENDAR_PRIMARY, 'missing_booking_calendar');
+    if (![env.GOOGLE_CALENDAR_PRIMARY, env.GOOGLE_CALENDAR_WORK, env.GOOGLE_CALENDAR_HOME].includes(id)) throw new ProviderError('google', 'booking_calendar_not_checked', true);
+    return id;
+  };
   const calendarPath = () => `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId())}`;
   const validateId = id => { if (!/^th[0-9a-f]{64}$/.test(id || '')) throw new ProviderError('google', 'invalid_event_identity', true); return id; };
   const eventUrl = id => `${calendarPath()}/events/${validateId(id)}`;
@@ -15,8 +19,11 @@ function createGoogleScheduler({ env, fetcher, googleToken, calendar, ProviderEr
     return 'th' + [...new Uint8Array(digest)].map(x => x.toString(16).padStart(2, '0')).join('');
   }
   async function call(url, { method = 'GET', body, allowMissing = false, allowConflict = false, etag } = {}) {
+    let accessToken;
+    try { accessToken = await googleToken(); }
+    catch { throw Object.assign(new ProviderError('google', 'authorization_unavailable'), { notDispatched: true }); }
     let result;
-    try { result = await fetcher(url, { method, redirect: 'error', signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${await googleToken()}`, ...(body ? { 'Content-Type': 'application/json' } : {}), ...(etag ? { 'If-Match': etag } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) }); }
+    try { result = await fetcher(url, { method, redirect: 'error', signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${accessToken}`, ...(body ? { 'Content-Type': 'application/json' } : {}), ...(etag ? { 'If-Match': etag } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) }); }
     catch { throw new ProviderError('google', 'response_unknown'); }
     if (allowMissing && [404, 410].includes(result.status)) return null;
     if (allowConflict && result.status === 409) return { conflict: true };
@@ -54,6 +61,7 @@ function createGoogleScheduler({ env, fetcher, googleToken, calendar, ProviderEr
   }
   return {
     async listAvailable({ from, to, durationMinutes }) {
+      calendarId();
       if (![60, 120].includes(durationMinutes)) throw new ProviderError('google', 'invalid_duration', true);
       const start = instant(from), end = instant(to), step = 30 * 60000;
       if (end <= start || end - start > 7 * 86400000) throw new ProviderError('google', 'invalid_range', true);
@@ -64,6 +72,7 @@ function createGoogleScheduler({ env, fetcher, googleToken, calendar, ProviderEr
       return candidates;
     },
     async isAvailable({ startsAt, durationMinutes }) {
+      calendarId();
       if (![60, 120].includes(durationMinutes)) throw new ProviderError('google', 'invalid_duration', true);
       const start = instant(startsAt) - 30 * 60000, end = instant(startsAt) + (durationMinutes + 30) * 60000;
       const busy = await calendar.getBusy({ startsAt: new Date(start).toISOString(), endsAt: new Date(end).toISOString() });

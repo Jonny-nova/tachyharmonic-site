@@ -99,11 +99,16 @@ test("refund unknown success beyond Stripe key lifetime is reconciled, never sub
   assert.equal(f.service.record(held.id).refundId, "re_recovered");
 });
 test("under-24-hour cancellation and external native cancellation require review", async () => {
-  const f = fixture(), held = await f.hold(); f.pay(held.id); await f.service.drain();
+  const f = fixture(), held = await f.hold();
+  const meetingUrl = "https://meet.google.com/abc-defg-hij";
+  f.adapters.scheduler.createAppointment = async () => ({ appointmentId: "event-1", meetingUrl });
+  f.pay(held.id); await f.service.drain();
   f.setNow("2026-10-01T09:00:00Z"); await f.service.cancel(held.id, f.token); await f.service.drain();
   assert.equal(f.service.record(held.id).status, "review_requested"); assert.equal(f.calls.refund, 0); assert.equal(f.calls.cancel, 0);
+  assert.equal(f.service.publicRecord(f.service.record(held.id)).meetingUrl, meetingUrl);
   f.adapters.scheduler.getAppointment = async () => ({ status: "canceled" }); await f.service.reconcile();
   assert.equal(f.service.record(held.id).externalChangePending, true); assert.equal(f.calls.refund, 0);
+  assert.equal(f.service.publicRecord(f.service.record(held.id)).meetingUrl, undefined);
 });
 test("strict scheduler boolean and full seconds prevent closing-window overflow", async () => {
   const base = { startsAt: "2026-09-30T12:00:00.001Z", rate: 50, now: "2026-09-27T08:00:00Z", busyByCalendar: { Primary: [], Work: [], Home: [] } };
@@ -205,6 +210,46 @@ test("refund later requiring action stays monitored and reports provider recover
   await f.service.reconcile(); assert.equal(f.service.record(held.id).refundStatus, "initiated");
   assert.equal(f.service.record(held.id).refundSettled, true);
   assert.equal(f.calls.messages.filter(x => x.kind === "refund_initiated").length, 2);
+});
+
+test("initial and recovered refunds requiring action never announce initiation", async () => {
+  for (const recovered of [false, true]) {
+    const f = fixture(), held = await f.hold(); f.pay(held.id); await f.service.drain();
+    f.adapters.payments.refund = async () => {
+      if (recovered) throw new Error("response_unknown");
+      return { refundId: "re_action", status: "requires_action" };
+    };
+    await f.service.cancel(held.id, f.token); await f.service.drain();
+    if (recovered) {
+      f.setNow("2026-09-29T09:00:00Z");
+      f.adapters.payments.getRefund = async () => ({ state: "found", refundId: "re_action", status: "requires_action" });
+      await f.service.drain();
+    }
+    assert.equal(f.service.record(held.id).refundId, "re_action");
+    assert.equal(f.service.record(held.id).refundStatus, "attention_required");
+    assert.equal(f.service.record(held.id).alertPending, true);
+    assert.equal(f.calls.messages.some(x => x.kind === "refund_initiated"), false);
+    assert.ok(f.calls.messages.some(x => x.kind === "cancellation_refund_pending"));
+    assert.ok(f.calls.messages.some(x => x.kind === "operational_alert"));
+    f.adapters.payments.getRefund = async () => ({ state: "found", refundId: "re_action", status: "succeeded" });
+    await f.service.reconcile();
+    assert.equal(f.service.record(held.id).refundStatus, "initiated");
+    assert.equal(f.service.record(held.id).refundSettled, true);
+    assert.equal(f.calls.messages.filter(x => x.kind === "refund_initiated").length, 1);
+  }
+});
+
+test("explicitly undispatched appointment retries after authorization recovers", async () => {
+  const f = fixture(), held = await f.hold();
+  f.adapters.scheduler.createAppointment = async () => { throw Object.assign(new Error("authorization_unavailable"), { notDispatched: true }); };
+  f.pay(held.id); await f.service.drain();
+  assert.equal(f.service.record(held.id).status, "confirming");
+  assert.equal(f.service.record(held.id).creationAttempted, false);
+  f.adapters.scheduler.findAppointment = async () => { throw new Error("no uncertain write to reconcile"); };
+  f.adapters.scheduler.createAppointment = async () => { f.calls.create++; return { appointmentId: "event-recovered" }; };
+  f.setNow("2026-09-28T08:10:00Z"); await f.service.drain();
+  assert.equal(f.service.record(held.id).status, "confirmed");
+  assert.equal(f.calls.create, 1);
 });
 test("provider time change just before cancellation cannot apply old notice policy", async () => {
   const f = fixture(), held = await f.hold(); f.pay(held.id); await f.service.drain();

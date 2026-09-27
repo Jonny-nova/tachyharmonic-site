@@ -51,6 +51,7 @@ export class BookingOffice extends DurableObject {
         if (!(await this.ctx.storage.getAlarm())) await this.ctx.storage.setAlarm(Date.now() + 60000);
         const token = request.headers.get("Authorization")?.match(/^Bearer (.+)$/)?.[1];
         if (request.method === "GET" && url.pathname === "/api/health") return reply({ status: "ok", bookingEnabled: this.service.enabled }, 200, cors);
+        if (request.method === "GET" && url.pathname === "/api/terms") return reply({ ...this.service.contractTerms(), traderAddress: this.env.TRADER_ADDRESS.trim() }, 200, cors);
         if (request.method === "GET" && url.pathname === "/api/availability") return reply(await this.service.availability({ startsAt: url.searchParams.get("startsAt"), from: url.searchParams.get("from"), to: url.searchParams.get("to"), rate: Number(url.searchParams.get("rate")) }), 200, cors);
         const admin = url.pathname.match(/^\/api\/admin\/bookings\/([0-9a-f-]{36})(?:\/(resolve))?$/);
         if (admin) {

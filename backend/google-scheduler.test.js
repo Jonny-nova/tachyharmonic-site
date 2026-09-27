@@ -82,3 +82,22 @@ test('Google scheduler is explicit and cannot use Calendly aggregate data accide
   assert.throws(()=>createAdapters({SCHEDULER_PROVIDER:'google',CALENDAR_SOURCE:'calendly'}),/google_calendar_source_required/);
   assert.throws(()=>createAdapters({SCHEDULER_PROVIDER:'typo'}),/unknown_scheduler_provider/);
 });
+
+test('booking calendar outside conflict coverage fails before availability or creation',async()=>{
+  let calls=0;
+  const scheduler=createGoogleScheduler({env:{GOOGLE_BOOKING_CALENDAR:'unchecked',GOOGLE_CALENDAR_PRIMARY:'primary',GOOGLE_CALENDAR_WORK:'work',GOOGLE_CALENDAR_HOME:'home'},ProviderError,now:()=>0,googleToken:async()=>{calls++;return 'token'},calendar:{getBusy:async()=>{calls++;}},fetcher:async()=>{calls++;}});
+  await assert.rejects(scheduler.listAvailable({from:REQUEST.startsAt,to:'2026-10-02T10:00:00Z',durationMinutes:120}),/booking_calendar_not_checked/);
+  await assert.rejects(scheduler.isAvailable(REQUEST),/booking_calendar_not_checked/);
+  await assert.rejects(scheduler.createAppointment(REQUEST),/booking_calendar_not_checked/);
+  assert.equal(calls,0);
+});
+
+test('token failure is explicitly undispatched but event transport failure remains unknown',async()=>{
+  let calls=0,tokenFails=true;
+  const scheduler=createGoogleScheduler({env:{GOOGLE_CALENDAR_PRIMARY:'primary'},ProviderError,now:()=>0,googleToken:async()=>{if(tokenFails)throw new Error('token offline');return 'token'},calendar:{},fetcher:async()=>{calls++;throw new Error('event response lost')}});
+  await assert.rejects(scheduler.createAppointment(REQUEST),e=>e.notDispatched===true&&!e.definitive);
+  assert.equal(calls,0);
+  tokenFails=false;
+  await assert.rejects(scheduler.createAppointment(REQUEST),e=>e.notDispatched!==true&&!e.definitive);
+  assert.equal(calls,1);
+});

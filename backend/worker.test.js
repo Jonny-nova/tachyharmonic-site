@@ -3,6 +3,29 @@ const test = require("node:test"), assert = require("node:assert/strict");
 const { Miniflare, convertV4MiniflareOptions } = require("miniflare");
 const { buildSync } = require("esbuild");
 const path = require("node:path"), fs = require("node:fs"), os = require("node:os");
+
+test("public terms disclose only the approved current snapshot and fail closed without an address", { timeout: 120000 }, async () => {
+  const script = buildSync({ entryPoints: [path.join(__dirname, "worker.mjs")], bundle: true, write: false, format: "esm", platform: "browser", external: ["cloudflare:workers"] }).outputFiles[0].text;
+  for (const traderAddress of [undefined, "TEST FIXTURE ONLY, 1 Example Street, Test Town"]) {
+    const options = convertV4MiniflareOptions({ modules: true, script, compatibilityDate: "2026-09-27",
+      durableObjects: { BOOKING_OFFICE: { className: "BookingOffice", useSQLite: true } },
+      bindings: { BOOKING_ENABLED: "false", ADMIN_TOKEN: "not-public-admin-secret", STRIPE_SECRET_KEY: "not-public-payment-secret", ...(traderAddress ? { TRADER_ADDRESS: traderAddress } : {}) } });
+    const mf = new Miniflare(options);
+    try {
+      const response = await mf.dispatchFetch("https://preview.example.test/api/terms");
+      assert.equal(response.status, traderAddress ? 200 : 503);
+      assert.equal(response.headers.get("Cache-Control"), "no-store");
+      const result = await response.json();
+      if (traderAddress) {
+        assert.deepEqual(Object.keys(result).sort(), ["text", "traderAddress", "version"]);
+        const snapshot = require("../booking/contract-terms").createContractTerms({ traderAddress });
+        assert.equal(result.text, snapshot.text); assert.equal(result.version, snapshot.version);
+        assert.equal(result.traderAddress, traderAddress);
+      } else assert.deepEqual(result, { error: "trader_address_required" });
+      assert.equal(JSON.stringify(result).includes("not-public"), false);
+    } finally { await mf.dispose(); }
+  }
+});
 test("staging assets are uncacheable and unindexed while all API paths remain in the booking worker", { timeout: 120000 }, async () => {
   const script = buildSync({ entryPoints: [path.join(__dirname, "worker.mjs")], bundle: true, write: false, format: "esm", platform: "browser", external: ["cloudflare:workers"] }).outputFiles[0].text;
   const options = convertV4MiniflareOptions({ modules: true, script, compatibilityDate: "2026-09-27",

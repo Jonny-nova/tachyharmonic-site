@@ -383,6 +383,14 @@
           <p class="contact-route">For enquiries, rescheduling, short-notice cancellation requests or booking problems, email <a href="mailto:jonathan@tachyharmonic.ai?subject=Tachyharmonic%20enquiry">jonathan@tachyharmonic.ai</a>.</p>
         </div>
         <div class="booking-panel" id="booking-panel">
+        <div class="intake-form" id="booking-current-terms" hidden>
+          <p id="booking-terms-status" role="status">Checking current booking terms…</p>
+          <details id="booking-terms-disclosure" hidden>
+            <summary>Read the current booking terms and business address</summary>
+            <p id="booking-terms-text" style="white-space: pre-wrap; overflow-wrap: anywhere"></p>
+          </details>
+          <button type="button" id="retry-booking-terms" hidden>Retry loading terms</button>
+        </div>
         <form class="intake-form" id="intake-preview" aria-describedby="intake-preview-status">
           <p class="eyebrow" id="booking-label">Session intake / preview</p>
           <p class="preview-notice" id="intake-preview-status">This form is a preview. It does not send or save your answers, book a session or take payment.</p>
@@ -434,7 +442,7 @@
           <fieldset class="form-group" id="booking-consent">
             <legend>Before continuing</legend>
             <p class="form-note">When booking is enabled, your name, email and appointment details are shared with the booking, payment, scheduling and email services to arrange your session. No AI processing or meeting recording is requested by this form. Read the <a href="terms.html#privacy">privacy notice</a>.</p>
-            <label class="form-choice"><input type="checkbox" id="booking-terms" required> <span>I have read and agree to the <a href="terms.html">booking and cancellation terms</a>.</span></label>
+            <label class="form-choice"><input type="checkbox" id="booking-terms" required> <span>I have read and agree to the <a href="terms.html#current-booking-terms">booking and cancellation terms</a>.</span></label>
             <div id="early-start-group" hidden>
               <label class="form-choice"><input type="checkbox" id="early-start"> <span id="early-start-wording">I expressly request preparation and my session to begin within my 14-day cancellation period. I understand that, if I cancel after work begins, a proportionate amount for work actually supplied may be payable where the law permits, and that my statutory cancellation right ends once the service is fully performed.</span></label>
               <p class="form-note"><a href="terms.html#early-performance">Read the early-performance terms</a>.</p>

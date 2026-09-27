@@ -38,10 +38,12 @@ test("early performance includes preparation and ends after London calendar day 
   assert.equal(needsEarlyStart(new Date(boundary).toISOString(), NOW), false);
 });
 
-test("Meet link is available only for a confirmed unchanged booking and an exact safe URL", () => {
+test("Meet link remains available during personal review of an unchanged booking and requires an exact safe URL", () => {
   const record = { ...baseRecord, status: "confirmed", meetingUrl: "https://meet.google.com/abc-defg-hij" };
   assert.equal(describeRecord(record).meetingUrl, record.meetingUrl);
-  for (const status of ["held", "confirming", "canceled", "review_requested"]) assert.equal(describeRecord({ ...record, status }).meetingUrl, null);
+  assert.equal(describeRecord({ ...record, status: "review_requested" }).meetingUrl, record.meetingUrl);
+  for (const status of ["held", "confirming", "canceled", "cancellation_pending"]) assert.equal(describeRecord({ ...record, status }).meetingUrl, null);
+  assert.equal(describeRecord({ ...record, status: "review_requested", externalChangePending: true }).meetingUrl, undefined);
   assert.equal(describeRecord({ ...record, externalChangePending: true }).meetingUrl, undefined);
   for (const meetingUrl of ["javascript:alert(1)", "https://meet.google.com.evil.test/abc-defg-hij", "https://user@meet.google.com/abc-defg-hij", "https://meet.google.com/abc-defg-hij?token=private", "http://meet.google.com/abc-defg-hij"]) assert.equal(describeRecord({ ...record, meetingUrl }).meetingUrl, null);
 });
@@ -164,7 +166,7 @@ test("static candidate remains disabled and does not collect AI preferences", ()
 
 // Minimal DOM event surface: exercise mount's actual navigation and network
 // handlers without claiming browser layout or live-provider verification.
-function mountedBooking({ stored, hash = '', handle }) {
+function mountedBooking({ stored, hash = '', handle, terms = { version: 'test-v1', text: 'Terms: TEST FIXTURE ONLY, 1 Example Street', traderAddress: 'TEST FIXTURE ONLY, 1 Example Street' } }) {
   class Element {
     constructor() { this.hidden = false; this.disabled = false; this.value = ''; this.listeners = {}; this.children = []; }
     addEventListener(type, callback) { (this.listeners[type] ||= []).push(callback); }
@@ -174,11 +176,11 @@ function mountedBooking({ stored, hash = '', handle }) {
     append(...nodes) { this.children.push(...nodes); }
     replaceChildren(...nodes) { this.children = nodes; }
     querySelectorAll() { return []; }
-    querySelector() { return null; }
+    querySelector(selector) { return selector === 'input[name="rate"]' ? element('first-rate') : null; }
     reportValidity() { return true; }
     reset() {}
     dispatchEvent() {}
-    focus() {}
+    focus() { this.focused = true; }
   }
   const nodes = new Map(), element = id => { if (!nodes.has(id)) nodes.set(id, new Element()); return nodes.get(id); };
   element('booking-management').hidden = true; element('booking-timezone').value = 'Europe/London';
@@ -189,7 +191,13 @@ function mountedBooking({ stored, hash = '', handle }) {
     sessionStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
     location: { href: 'https://example.test/index.html' + hash, hash, assign: url => { win.redirect = url; } },
     history: { replaceState: (_state, _title, next) => { win.location.hash = next; win.location.href = 'https://example.test/index.html' + next; } },
-    fetch: async (url, request) => { calls.push({ url, request }); return new Response(JSON.stringify(await handle(url, request)), { headers: { 'Content-Type': 'application/json' } }); },
+    fetch: async (url, request) => {
+      if (url.endsWith('/api/terms')) {
+        if (terms instanceof Error) throw terms;
+        return new Response(JSON.stringify(terms), { headers: { 'Content-Type': 'application/json' } });
+      }
+      calls.push({ url, request }); return new Response(JSON.stringify(await handle(url, request)), { headers: { 'Content-Type': 'application/json' } });
+    },
   });
   const calls = [];
   mount(win, { enabled: true, apiBase: 'https://api.example.test', consentVersion: 'v1-2026-09-27' });
@@ -197,6 +205,32 @@ function mountedBooking({ stored, hash = '', handle }) {
 }
 const settle = async () => { for (let i = 0; i < 4; i++) await new Promise(resolve => setImmediate(resolve)); };
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
+
+test('checkout remains closed when current terms cannot be disclosed', async () => {
+  for (const terms of [new Error('offline'), {}, { version: 'v1', text: 'Missing business address', traderAddress: 'TEST FIXTURE ONLY, 1 Example Street' }]) {
+    const fixture = mountedBooking({ stored: { id: baseRecord.id, token }, terms,
+      handle: async () => ({ ...baseRecord, expiresAt: '2099-01-01T00:00:00Z' }) });
+    await settle();
+    assert.equal(fixture.element('resume-checkout').disabled, true);
+    assert.equal(fixture.element('booking-submit').disabled, true);
+    assert.equal(fixture.element('retry-booking-terms').hidden, false);
+    await fixture.element('resume-checkout').fire('click');
+    assert.ok(fixture.calls.every(call => !call.url.endsWith('/checkout')));
+    assert.equal(fixture.win.redirect, undefined);
+  }
+});
+
+test('terms are disclosed as text before a recovered booking can resume payment', async () => {
+  const terms = { version: 'test-v1', text: '<script>not executable</script> TEST FIXTURE ONLY, 1 Example Street', traderAddress: 'TEST FIXTURE ONLY, 1 Example Street' };
+  const fixture = mountedBooking({ stored: { id: baseRecord.id, token }, terms,
+    handle: async url => url.endsWith('/checkout') ? { checkoutUrl: 'https://checkout.stripe.com/c/pay/test' } : { ...baseRecord, expiresAt: '2099-01-01T00:00:00Z' } });
+  await settle();
+  assert.equal(fixture.element('booking-terms-text').textContent, terms.text);
+  assert.equal(fixture.element('booking-terms-disclosure').hidden, false);
+  assert.equal(fixture.element('resume-checkout').disabled, false);
+  await fixture.element('resume-checkout').fire('click');
+  assert.equal(fixture.win.redirect, 'https://checkout.stripe.com/c/pay/test');
+});
 
 test('refresh and BFCache back recover status by GET without reposting a hold or checkout', async () => {
   let status = 'held';
@@ -238,6 +272,8 @@ test('late refresh cannot replace a new-booking form or a completed cancellation
   await fixture.element('new-booking').fire('click'); pending.resolve({ ...baseRecord, status: 'confirmed' }); await olderRefresh;
   assert.equal(fixture.element('intake-preview').hidden, false);
   assert.equal(fixture.element('booking-management').hidden, true);
+  assert.equal(fixture.element('load-times').disabled, true);
+  assert.equal(fixture.element('first-rate').focused, true);
 });
 
 test('navigating away from a pending checkout cannot redirect the new booking to the old payment', async () => {

@@ -10,7 +10,7 @@ const COPY = Object.freeze({
   cancellation_confirmed: ['Your Tachyharmonic appointment is cancelled', 'Your appointment has been cancelled. Any refund due will be confirmed separately.'],
   refund_initiated: ['Your Tachyharmonic refund has been initiated', 'Stripe has accepted your refund. This does not mean the funds have reached your account yet; your payment provider determines when they arrive.'],
   cancellation_refund_pending: ['Your Tachyharmonic request is still being processed', 'Your cancellation or refund is still being processed. This message does not confirm that cancellation or a refund has completed. Jonathan will follow up if action is needed.'],
-  manual_review_received: ['Your request has been received', 'Your request has been recorded for Jonathan to review. No cancellation or refund decision has been made yet.'],
+  manual_review_received: ['Your request has been received', 'Your request has been recorded for Jonathan to review. No cancellation or refund decision under the appointment policy has been made yet. If you are exercising a valid statutory cancellation right, that right does not depend on Jonathan’s approval.'],
   operational_alert: ['Tachyharmonic booking needs attention', 'A booking needs operational review. Check the private booking record and provider state before taking action.'],
 });
 

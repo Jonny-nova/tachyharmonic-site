@@ -85,7 +85,7 @@
       failed: "The refund has not completed. Jonathan needs to review it; please contact him if you need help.",
       attention_required: "The payment provider reports a problem with the refund. Jonathan needs to review it; refund completion has not been confirmed.",
     }[record.refundStatus || "none"] || "The refund status needs checking. Please contact Jonathan.";
-    const meetingUrl = record.status === "confirmed" && /^https:\/\/meet\.google\.com\/[a-z-]+$/.test(record.meetingUrl || "") ? record.meetingUrl : null;
+    const meetingUrl = ["confirmed", "review_requested"].includes(record.status) && /^https:\/\/meet\.google\.com\/[a-z-]+$/.test(record.meetingUrl || "") ? record.meetingUrl : null;
     return { title, message, refund, meetingUrl, canPay: record.status === "held" && !expired,
       canCancel: record.status === "confirmed", canRestart: ["booking_failed", "canceled", "confirmed"].includes(record.status),
       pending: ["paid_pending", "confirming", "cancellation_pending"].includes(record.status) || record.refundStatus === "pending" };
@@ -199,7 +199,7 @@
     };
     const api = createApi({ apiBase: config.apiBase, fetchImpl: win.fetch.bind(win) });
     const flow = createFlow({ api, read, save, cryptoApi: win.crypto, encode: win.btoa.bind(win) });
-    let currentRecord, selectedSlot, slots = [], week = 0, requestSequence = 0, statusSequence = 0, loading = false, submitting = false, pollTimer;
+    let currentRecord, selectedSlot, slots = [], week = 0, requestSequence = 0, statusSequence = 0, loading = false, submitting = false, pollTimer, termsReady = false;
     const isCurrent = access => context?.id === access?.id && context?.token === access?.token;
     const openedAt = Date.now(), rangeStart = openedAt + 48 * 3600000, horizon = openedAt + 28 * DAY;
     const rate = () => Number(form.querySelector('input[name="rate"]:checked')?.value);
@@ -215,8 +215,31 @@
       const early = !!selectedSlot && needsEarlyStart(selectedSlot.startsAt);
       el("early-start-group").hidden = !early; el("early-start").required = early;
       if (!early) el("early-start").checked = false;
-      el("booking-submit").disabled = !selectedSlot || submitting;
+      el("booking-submit").disabled = !selectedSlot || submitting || !termsReady;
     };
+    async function loadTerms() {
+      termsReady = false; updateConsent(); el("resume-checkout").disabled = true;
+      el("booking-current-terms").hidden = false;
+      el("retry-booking-terms").hidden = true;
+      el("booking-terms-disclosure").hidden = true;
+      el("booking-terms-status").textContent = "Checking current booking terms…";
+      try {
+        const terms = await api("/api/terms");
+        if (typeof terms.version !== "string" || !terms.version.trim() || terms.version.length > 200 ||
+            typeof terms.text !== "string" || !terms.text.trim() || terms.text.length > 100000 ||
+            typeof terms.traderAddress !== "string" || terms.traderAddress.trim().length < 10 ||
+            !terms.text.includes(terms.traderAddress)) throw new Error("invalid_terms_response");
+        el("booking-terms-text").textContent = terms.text;
+        el("booking-terms-disclosure").hidden = false;
+        el("booking-terms-status").textContent = "Current terms are available below, including the business contact address. Please read them before continuing.";
+        termsReady = true;
+      } catch {
+        el("booking-terms-text").textContent = "";
+        el("booking-terms-status").textContent = "The current booking terms could not be loaded. Payment is unavailable until they can be shown. Please retry or email Jonathan.";
+        el("retry-booking-terms").hidden = false;
+      }
+      updateConsent(); el("resume-checkout").disabled = !termsReady;
+    }
     const renderSlots = () => {
       el("booking-slots").replaceChildren();
       slots.forEach((slot, index) => {
@@ -294,6 +317,7 @@
       finally { if (isCurrent(access) && sequence === statusSequence) el("refresh-booking").disabled = false; }
     }
     async function checkout() {
+      if (!termsReady) return;
       const access = { ...context };
       el("resume-checkout").disabled = true; clearError();
       try { const url = await flow.checkout(access); if (isCurrent(access)) win.location.assign(url); }
@@ -322,7 +346,7 @@
     el("next-week").addEventListener("click", () => { if (rangeStart + (week + 1) * 7 * DAY < horizon) { week++; loadSlots(); } });
     el("booking-timezone").addEventListener("change", () => { renderSlots(); if (currentRecord) renderRecord(currentRecord); });
     form.addEventListener("submit", async () => {
-      if (submitting || !selectedSlot || !form.reportValidity()) return;
+      if (submitting || !termsReady || !selectedSlot || !form.reportValidity()) return;
       updateConsent();
       if (!form.reportValidity()) return;
       submitting = true; updateConsent(); clearError(); form.setAttribute("aria-busy", "true");
@@ -367,7 +391,7 @@
       if (!currentRecord || !describeRecord(currentRecord).canRestart) return;
       save(null); statusSequence++; currentRecord = null; clearTimeout(pollTimer); form.hidden = false; el("booking-management").hidden = true;
       form.reset(); el("intake-note").dispatchEvent(new Event("input"));
-      win.history.replaceState(null, "", "#contact"); selectedSlot = null; slots = []; renderSlots(); updateConsent(); updateWeekControls(); el("load-times").focus();
+      win.history.replaceState(null, "", "#contact"); selectedSlot = null; slots = []; renderSlots(); updateConsent(); updateWeekControls(); form.querySelector('input[name="rate"]').focus();
     });
     doc.addEventListener("visibilitychange", () => {
       if (doc.hidden) clearTimeout(pollTimer);
@@ -407,6 +431,8 @@
     }
     win.addEventListener("hashchange", () => { if (new URLSearchParams(win.location.hash.slice(1)).has("booking")) return recover(); });
     win.addEventListener("pageshow", event => { if (event.persisted) return recover(); });
+    el("retry-booking-terms").addEventListener("click", loadTerms);
+    loadTerms();
     recover();
     updateWeekControls();
   }
