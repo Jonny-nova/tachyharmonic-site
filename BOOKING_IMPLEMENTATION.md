@@ -4,6 +4,10 @@ Updated 27 September 2026. This describes the integrated code candidate, not a c
 
 Jonny explicitly approved replacing Calendly in the V1 controlled booking path with **direct Google Calendar appointments and Google Meet** during this task. The weekly economics and appointment rules in the [booking specification](docs/BOOKING_SYSTEM_SPEC.md) remain authoritative. Earlier Calendly architecture notes are historical; the retained Calendly adapter is not the selected V1 scheduler. The replacement removes a Calendly public scheduling link from this website's journey. It does not itself deactivate unrelated legacy links or prove that other bookings cannot affect Jonathan's workload.
 
+## Continuation checkpoint
+
+The [finish-integration evidence](docs/V1-CANDIDATE-2026-09-27.md) records current provider setup and its limits. Staging now stores the sandbox key and Jonathan-approved trader address. GET /api/terms supplies the current full contract snapshot and address before payment; unavailable terms block new holds/Checkout while recovery/cancellation remain available. Google consent and actual paid lifecycle are still incomplete; booking remains disabled. The full local suite is 118/118, with actual disabled responsive checks and separately labelled real-provider Checkout/email adapter tests. These are not end-to-end booking acceptance.
+
 ## Implemented candidate
 
 The static site calls a Cloudflare Worker. One SQLite Durable Object, named `tachyharmonic-all-weeks-v1`, owns every London week. `backend/store.js` commits synchronous read-check-write operations through `transactionSync`; network calls run outside database transactions. The object serializes HTTP requests and alarms while performing provider checks. Cloudflare documents this [transactional SQLite storage model](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/).

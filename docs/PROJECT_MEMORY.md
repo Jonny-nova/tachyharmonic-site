@@ -2,6 +2,22 @@
 
 This is an evidence-labelled index of current work and meaningful product intentions. It links to the detailed sources; it does not replace Jonny's decisions, the brand kit, booking specification, or implementation notes.
 
+## V1 finish-integration continuation — 27 September 2026
+
+Source: Jonathan's fresh **TACHYHARMONIC V1 — FINISH INTEGRATION AND PRODUCE LAUNCH CANDIDATE** brief. It authorizes reversible provider configuration, Stripe sandbox tests, staging-only booking enablement after prerequisites, bounded agents, and candidate push/update to PR #10 after integrated tests pass. It forbids merge, public launch, real charges, live payout changes and V2 work. Root remains integration owner.
+
+Current evidence is in [V1 candidate continuation](V1-CANDIDATE-2026-09-27.md), which supersedes earlier incomplete provider snapshots only where explicitly verified. Starting checkpoint was clean at dc7150a; PR #10 remains open/draft at f44b8b9. The continuation has not pushed or merged.
+
+- Google test user mrbonello@gmail.com now saves and persists; actual authorization reaches the two Calendar-permission consent screen. Grant/refresh and actual Calendar/Meet lifecycle remain pending Jonathan's completion of that screen. The original save failure was not reproduced and its cause is not established. Testing status still carries the seven-day token limitation; production OAuth readiness remains separate.
+- Cloudflare device login succeeded after localhost callback/CSRF failures. Existing five permissions retained. Stripe sandbox secret and approved trader address are now encrypted staging secrets; names read back successfully. No live Stripe payout setting changed.
+- Jonathan explicitly approved using the existing Stripe customer-support address in pre-checkout terms and confirmations. It is loaded from configuration, not copied into Git. New /api/terms disclosure and frontend fail-closed terms loading are deployed with booking still disabled.
+- All five actual sandbox Checkout amounts and same-key retry/correlation checks passed; all unpaid test Sessions were expired and read back. This is not paid booking evidence.
+- Seven labelled notification-template tests delivered; six customer templates reached Gmail with correct sender/reply routing. Sampled receiver headers passed SPF/DKIM/DMARC. Retry IDs matched; no duplicate copies observed. Actual booking-triggered messages/private-link recovery remain unproved.
+- Recovery, refund truthfulness, calendar coverage, Meet-link retention and keyboard-focus fixes passed a complete 118-test local suite. Disabled actual staging preview passed four-size, keyboard and labels checks. Current deployed version 1858a67d-0138-4a50-9b52-13a3fbb68ec8 remains disabled.
+- [Data retention procedure](BOOKING-DATA-RETENTION.md) is prepared for Jonathan's final launch acceptance. Provider transfer facts are now explicit, including Resend US storage despite Ireland sending. No deletion or historical-review claim is made.
+
+The paid staging lifecycle and integrated failure matrix remain outstanding. No local/provider component pass should be represented as a launch-candidate pass.
+
 ## V1 integration effort — 27 September 2026
 
 Source: Jonny's attached **TACHYHARMONIC V1 — INTEGRATE, PROVE, AND PREPARE FOR LAUNCH** brief in this task. It explicitly authorizes implementation, bounded specialist delegation, baseline and implementation commits, free-tier staging infrastructure, reversible integration configuration, and pushing/updating PR #10. It excludes V2 AI assistance, animation, avatars, purchases, real charges, bank/MFA handling, historical deletion, merge and public launch. Earlier planning-only restrictions below are historical where this newer instruction supersedes them.

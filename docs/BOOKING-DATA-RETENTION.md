@@ -1,0 +1,36 @@
+# Booking data retention procedure
+
+Prepared 27 September 2026 for Jonathan's final V1 launch acceptance. This is a proposed operating procedure, not evidence of historical reviews, deletions or provider-account acceptance. Jonathan owns its adoption and execution. No customer data was deleted while preparing it.
+
+## Scope and current implementation
+
+The private Cloudflare Durable Object holds booking/contact details, optional notes, payment and appointment references, consent and contract snapshots, recovery jobs, webhook/idempotency records and safe-action audit rows. `backend/service.js` clears failed/expired notes during cleanup and schedules paid-appointment notes for clearing 30 days after appointment start. Management access expires 30 days after start. Expired rate-limit entries are removed. These are code observations, not evidence that a particular deployed record was erased.
+
+There is no general automatic purge of names, emails, booking records, contract snapshots, completed jobs, event/idempotency records or audit rows. Calendar cancellation is not a routine completed-session retention policy. Do not describe access expiry or note clearing as deletion of the whole booking.
+
+## Monthly review
+
+After adoption, Jonathan reviews retained records monthly and when responding to a deletion request. Keep a minimal dated review record: reviewer, categories reviewed, purpose still requiring retention, action taken, unresolved provider requests and next review date. Use opaque booking references; do not copy notes, addresses, email contents or secrets into the review log.
+
+1. Identify records whose appointment, payment, refund and complaint are resolved. Retain unresolved records only to the extent needed to complete or investigate the matter. A failed or abandoned checkout can still receive a late payment or webhook; check authoritative payment state before treating it as settled.
+2. Confirm that expired/failed notes and notes past the 30-day deadline have been cleared. Investigate cleanup failure without duplicating the note in reports. Retain no note merely because other financial records must remain.
+3. For each remaining category, record a specific purpose and review date. Appointment/contact details are needed for delivery and unresolved correspondence; payment/contract evidence may be needed for accounting, refunds, disputes or claims; security/audit information is needed only while relevant to recovery, misuse or an incident. Do not retain an entire intake record where a smaller financial or contractual record meets the purpose.
+4. Where an accounting obligation or actual/potential claim requires retention, identify the applicable obligation or claim and its relevant end/review date. Obtain appropriate advice if unclear. This procedure does not impose an unsupported blanket six-year period or assume that all records have the same legal deadline.
+5. Remove or anonymise data when no documented purpose remains. Review linked provider copies and correspondence as well as the local record. Irreversible anonymisation must remove the ability to reconnect the data to a person; deleting a name alone is insufficient when email, booking references or provider identifiers still identify them.
+6. Record completion and outstanding provider/backup limitations without claiming instantaneous or universal deletion. Schedule the next monthly review.
+
+## Performing a removal safely
+
+The current application has no general deletion endpoint. A reviewer must therefore prepare a bounded, separately reviewed maintenance change for selected settled records; this procedure does not authorize an improvised whole-store reset or direct deletion of a live booking. Validate the operation on synthetic data first. Check capacity, completed/unresolved jobs, payment reconciliation, contract evidence and idempotency dependencies before changing records. Do not erase replay protection or unresolved recovery data merely to meet an arbitrary age threshold. If removal cannot safely proceed, record the concrete dependency and next action rather than silently leaving the record indefinitely.
+
+Any temporary export used for maintenance contains personal data and needs restricted access and a recorded deletion deadline. Avoid making a new export unless necessary. Record which existing recovery copies could reintroduce erased information and ensure a restore reapplies completed erasures before normal operation.
+
+## Provider copies and transfers
+
+- **Cloudflare:** the [self-serve agreement, section 6.1](https://www.cloudflare.com/terms/) incorporates the [customer DPA](https://www.cloudflare.com/cloudflare-customer-dpa/), including applicable UK transfer safeguards. The code does not constrain the object to a jurisdiction. Actual object location and backup/restore retention were not established in this review; do not promise UK/EU-only processing or immediate backup deletion. [Jurisdiction documentation](https://developers.cloudflare.com/durable-objects/reference/data-location/).
+- **Stripe:** the [DPA](https://stripe.com/gb/legal/dpa) distinguishes processor and controller purposes; [transfer terms](https://stripe.com/legal/dpa/faqs) include the UK Addendum. Stripe may need records for its own regulatory and payment-security purposes. A local deletion does not erase Stripe transactions. Confirm the account's jurisdiction and any nonstandard agreement before stating account-specific terms.
+- **Google Calendar/Meet:** this integration uses the intended personal Gmail account. Do not assert a Workspace business DPA or regional-storage commitment based on the OAuth Cloud project. Review event sharing and applicable account settings. [Google privacy](https://policies.google.com/privacy) describes worldwide processing and retention; [transfer arrangements](https://policies.google.com/privacy/frameworks) describe its UK-extension participation. Remove obsolete completed events where no purpose remains; attendee copies and Google retention may persist. Do not promise their deletion from Jonathan's calendar action alone.
+- **Resend:** [published GDPR information](https://resend.com/security/gdpr) says the DPA takes effect at signup, data is stored in the US and the Ireland region controls sending only. Published Free/Pro/Scale email/log retention is 30 days; backups persist seven days. Confirm the actual plan before treating these durations as account evidence. Earlier removal requires a provider request. Transaction mail received by a customer remains under the recipient's control. The provider describes SCC/UK Addendum safeguards and additional DPF participation.
+- **Porkbun human mailbox:** review booking-related correspondence under the same purpose criteria, including sent/deleted folders and synced clients. Provider backup retention and the account's contractual transfer details were not established in this bounded review; do not invent them.
+
+Before acceptance, Jonathan confirms ownership of the monthly review and the practical means of completing any required removals. Provider information above was researched from authoritative public documents on 27 September 2026; it is not a signed-account readback or a blanket legal-compliance certification.
