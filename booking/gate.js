@@ -62,10 +62,10 @@ class BookingGate {
             idempotent: true, status: record.status, refundPending: record.refundStatus === "pending" }
           : { accepted: false, reason: "payment_id_conflict" } };
       }
-      if (record.status !== "held") {
+      if (!["held", "booking_failed"].includes(record.status)) {
         return { bookings, result: { accepted: false, reason: "invalid_state" } };
       }
-      const expired = parseInstant(record.expiresAt).getTime() <= current;
+      const expired = record.status === "booking_failed" || parseInstant(record.expiresAt).getTime() <= current;
       const next = bookings.map((item) => item.id === id ? {
         ...item, paymentId, status: expired ? "booking_failed" : "paid_pending",
         refundStatus: expired ? "pending" : "none", alertPending: expired,

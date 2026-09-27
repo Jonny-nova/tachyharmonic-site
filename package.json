@@ -3,10 +3,17 @@
   "version": "1.0.0",
   "description": "Tachyharmonic static website",
   "scripts": {
-    "test": "node check-resources.js && node --test booking/booking.test.js"
+    "test": "node check-resources.js && node --test booking/*.test.js backend/*.test.js js/*.test.js scripts/*.test.js",
+    "test:domain": "node --test booking/*.test.js",
+    "build:backend": "node scripts/build-staging.js && wrangler deploy --dry-run --outdir dist",
+    "dev:backend": "node scripts/build-staging.js && wrangler dev"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs"
+  "type": "commonjs",
+  "devDependencies": {
+    "miniflare": "^5.20260926.0-alpha",
+    "wrangler": "^4.142.0"
+  }
 }

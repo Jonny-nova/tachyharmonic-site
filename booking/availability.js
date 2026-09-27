@@ -53,8 +53,8 @@ function appointmentWindow(start, end, openings) {
     if (last && interval[0] <= last[1]) last[1] = Math.max(last[1], interval[1]);
     else merged.push([...interval]);
   }
-  const from = localStart.hour * 60 + localStart.minute;
-  const to = localEnd.hour * 60 + localEnd.minute;
+  const from = localStart.hour * 60 + localStart.minute + localStart.second / 60 + (start % 1000) / 60000;
+  const to = localEnd.hour * 60 + localEnd.minute + localEnd.second / 60 + (end % 1000) / 60000;
   return merged.some(([windowStart, windowEnd]) => from >= windowStart && to <= windowEnd);
 }
 
@@ -117,7 +117,7 @@ async function providerSlot({ calendar, scheduler, ...request }) {
   const local = evaluateSlot({ ...request, busyByCalendar });
   if (!local.available) return local;
   const remoteAvailable = await scheduler.isAvailable({ startsAt: request.startsAt, durationMinutes: offer.durationMinutes });
-  return remoteAvailable ? local : { available: false, reason: "scheduler_unavailable" };
+  return remoteAvailable === true ? local : { available: false, reason: "scheduler_unavailable" };
 }
 
 module.exports = {

@@ -4,7 +4,7 @@ const { offerForRate, summarize } = require("./rules");
 
 const londonFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
-  hour: "2-digit", minute: "2-digit", hourCycle: "h23", weekday: "short",
+  hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", weekday: "short",
 });
 const STATUSES = new Set([
   "active", "held", "paid_pending", "confirming", "confirmed",
@@ -34,7 +34,7 @@ function londonParts(value) {
     .map((part) => [part.type, part.value]));
   return {
     year: Number(parts.year), month: Number(parts.month), day: Number(parts.day),
-    hour: Number(parts.hour), minute: Number(parts.minute), weekday: parts.weekday,
+    hour: Number(parts.hour), minute: Number(parts.minute), second: Number(parts.second), weekday: parts.weekday,
   };
 }
 
