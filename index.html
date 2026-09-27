@@ -11,6 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/booking.css">
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -381,25 +382,44 @@
           <p>It can be a question, a half-formed idea or a very specific thing. A few sentences are plenty.</p>
           <p class="contact-route">For enquiries, rescheduling, short-notice cancellation requests or booking problems, email <a href="mailto:jonathan@tachyharmonic.ai?subject=Tachyharmonic%20enquiry">jonathan@tachyharmonic.ai</a>.</p>
         </div>
+        <div class="booking-panel" id="booking-panel">
         <form class="intake-form" id="intake-preview" aria-describedby="intake-preview-status">
-          <p class="eyebrow">Session intake / preview</p>
+          <p class="eyebrow" id="booking-label">Session intake / preview</p>
           <p class="preview-notice" id="intake-preview-status">This form is a preview. It does not send or save your answers, book a session or take payment.</p>
-
-          <fieldset class="form-group">
-            <legend>What would you like help with?</legend>
-            <label class="form-choice"><input type="radio" name="help-with" value="understanding-ai"> Understanding AI</label>
-            <label class="form-choice"><input type="radio" name="help-with" value="doing-something"> Doing something with AI</label>
-          </fieldset>
+          <noscript><p>Online booking needs JavaScript. You can email Jonathan using the enquiry link.</p></noscript>
 
           <fieldset class="form-group">
             <legend>Choose an appointment and rate</legend>
-            <label class="form-choice"><input type="radio" name="rate" value="supported-hour"> One hour · supported · £30</label>
-            <label class="form-choice"><input type="radio" name="rate" value="standard-hour"> One hour · standard · £50</label>
-            <label class="form-choice"><input type="radio" name="rate" value="solidarity-hour"> One hour · solidarity · £70</label>
-            <label class="form-choice"><input type="radio" name="rate" value="standard-double"> Two hours · standard · £100</label>
-            <label class="form-choice"><input type="radio" name="rate" value="solidarity-double"> Two hours · solidarity · £140</label>
-            <p class="form-note">The £30 supported rate is for one-hour appointments only. This preview does not check live availability.</p>
+            <label class="form-choice"><input type="radio" name="rate" value="30" required> One hour · supported · £30</label>
+            <label class="form-choice"><input type="radio" name="rate" value="50"> One hour · standard · £50</label>
+            <label class="form-choice"><input type="radio" name="rate" value="70"> One hour · solidarity · £70</label>
+            <label class="form-choice"><input type="radio" name="rate" value="100"> Two hours · standard · £100</label>
+            <label class="form-choice"><input type="radio" name="rate" value="140"> Two hours · solidarity · £140</label>
+            <p class="form-note" id="rate-note">The £30 supported rate is for one-hour appointments only. This preview does not check live availability.</p>
           </fieldset>
+
+          <fieldset class="form-group" id="booking-times" disabled>
+            <legend>Choose a time</legend>
+            <label class="field-label" for="booking-timezone">Show times in</label>
+            <select id="booking-timezone" name="timezone"><option value="Europe/London">London (UK)</option></select>
+            <p class="form-note">Appointments are offered at least 48 hours ahead and up to four weeks ahead. Times include the selected time zone.</p>
+            <div class="booking-week-controls">
+              <button type="button" id="previous-week" disabled>Earlier week</button>
+              <button type="button" id="load-times" disabled>Find available times</button>
+              <button type="button" id="next-week" disabled>Later week</button>
+            </div>
+            <p id="booking-range" class="form-note"></p>
+            <p id="slot-status" role="status" aria-live="polite">Choose a rate. Live availability is not connected yet.</p>
+            <div id="booking-slots" class="booking-slots"></div>
+          </fieldset>
+
+          <div class="form-group booking-details">
+            <label class="field-label" for="booking-name">Your name</label>
+            <input id="booking-name" name="name" type="text" autocomplete="name" maxlength="120" required>
+            <label class="field-label" for="booking-email">Your email</label>
+            <input id="booking-email" name="email" type="email" autocomplete="email" maxlength="254" required aria-describedby="booking-email-help">
+            <p class="form-note" id="booking-email-help">Use the address where you want to receive booking updates.</p>
+          </div>
 
           <div class="form-group">
             <label class="field-label" for="intake-note">What’s bringing you here? <span>(Optional)</span></label>
@@ -408,24 +428,49 @@
               <p id="intake-helper">A few paragraphs is plenty. This isn’t homework.</p>
               <output id="character-count" for="intake-note">0 / 1200</output>
             </div>
-            <p class="form-privacy" id="intake-privacy">Avoid sensitive information.</p>
+            <p class="form-privacy" id="intake-privacy">Avoid sensitive information. When booking is enabled, your optional note is sent to Jonathan for preparation and held by the booking service. It is not sent to AI, Stripe, Google Calendar or Google Meet.</p>
           </div>
 
-          <fieldset class="form-group summary-group">
-            <legend>AI meeting summary</legend>
-            <label class="form-choice"><input type="checkbox" name="summary-interest"> I’d like to consider a written AI summary of our session.</label>
-            <p class="form-note">Ticking this only says you’re interested. It does not give permission to turn the feature on.</p>
-            <details class="summary-explainer">
-              <summary>How would Zoom’s AI summary work?</summary>
-              <div class="summary-explainer-content">
-                <p>Zoom can use what is said during the call to make a written summary, rather like optional note-taking. I would ask before turning it on. You can say no at the start, or ask me to stop it at any point if it feels uncomfortable.</p>
-                <p>Stopping it prevents the rest of the conversation being added, but it does not automatically erase the part already processed. I would explain who could receive the summary and how it would be handled before we use it.</p>
-              </div>
-            </details>
+          <fieldset class="form-group" id="booking-consent">
+            <legend>Before continuing</legend>
+            <p class="form-note">When booking is enabled, your name, email and appointment details are shared with the booking, payment, scheduling and email services to arrange your session. No AI processing or meeting recording is requested by this form. Read the <a href="terms.html#privacy">privacy notice</a>.</p>
+            <label class="form-choice"><input type="checkbox" id="booking-terms" required> <span>I have read and agree to the <a href="terms.html">booking and cancellation terms</a>.</span></label>
+            <div id="early-start-group" hidden>
+              <label class="form-choice"><input type="checkbox" id="early-start"> <span id="early-start-wording">I expressly request preparation and my session to begin within my 14-day cancellation period. I understand that, if I cancel after work begins, a proportionate amount for work actually supplied may be payable where the law permits, and that my statutory cancellation right ends once the service is fully performed.</span></label>
+              <p class="form-note"><a href="terms.html#early-performance">Read the early-performance terms</a>.</p>
+              <p class="form-note">Preparation begins 30 minutes before your appointment. If you prefer not to request an early start, choose a later time.</p>
+            </div>
           </fieldset>
 
-          <button class="button button-primary" type="submit" disabled>Booking is not connected yet</button>
+          <p id="booking-error" class="booking-error" role="alert" tabindex="-1" hidden></p>
+          <button class="button button-primary" id="booking-submit" type="submit" disabled>Booking is not connected yet</button>
+          <p class="form-note" id="payment-explanation" hidden>You will continue to Stripe to pay the selected price. Payment alone does not confirm an appointment.</p>
         </form>
+        <section class="intake-form booking-management" id="booking-management" aria-labelledby="booking-status-title" hidden>
+          <p class="eyebrow">Your appointment</p>
+          <h3 id="booking-status-title" tabindex="-1">Checking your booking</h3>
+          <p id="booking-status-message" role="status" aria-live="polite"></p>
+          <p id="booking-summary"></p>
+          <p id="booking-meeting" hidden><a id="booking-meeting-link" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Join Google Meet</a></p>
+          <p id="booking-refund" role="status" aria-live="polite"></p>
+          <p id="booking-last-checked" class="form-note"></p>
+          <p id="management-error" class="booking-error" role="alert" hidden></p>
+          <div class="booking-management-actions">
+            <button type="button" id="refresh-booking">Check status</button>
+            <button type="button" id="resume-checkout" hidden>Continue to payment</button>
+            <button type="button" id="copy-management">Copy private booking link</button>
+            <button type="button" id="cancel-booking" hidden>Cancel appointment</button>
+          </div>
+          <p class="form-note">Your private link gives access to this booking. Keep it safe and do not share it publicly. <a href="mailto:jonathan@tachyharmonic.ai">Email Jonathan</a> to reschedule or ask for help.</p>
+          <div id="cancellation-confirm" class="preview-notice" hidden>
+            <p id="cancellation-explanation"></p>
+            <button type="button" id="confirm-cancellation">Confirm cancellation</button>
+            <button type="button" id="keep-booking">Keep appointment</button>
+          </div>
+          <p id="management-feedback" role="status" aria-live="polite"></p>
+          <button type="button" id="new-booking" hidden>Choose another appointment</button>
+        </section>
+        </div>
       </div>
     </section>
   </main>
@@ -451,5 +496,8 @@
     </div>
   </footer>
   <script src="js/script.js"></script>
+  <script src="js/booking-config.js"></script>
+  <script src="booking/consent.js"></script>
+  <script src="js/booking.js"></script>
 </body>
 </html>

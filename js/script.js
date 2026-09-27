@@ -7,7 +7,6 @@ mobileNavigation.querySelectorAll("a").forEach((link) => {
   });
 });
 
-const intakeForm = document.getElementById("intake-preview");
 const intakeNote = document.getElementById("intake-note");
 const characterCount = document.getElementById("character-count");
 
@@ -17,4 +16,3 @@ function updateCharacterCount() {
 
 intakeNote.addEventListener("input", updateCharacterCount);
 updateCharacterCount();
-intakeForm.addEventListener("submit", (event) => event.preventDefault());
