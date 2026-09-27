@@ -20,20 +20,22 @@ From this repository, run:
 
 Open http://localhost:8000.
 
-The intake form is a visual and interaction preview. It does not send or save answers, book a session or take payment. Its submit button is disabled until a real booking flow is agreed and connected.
+The default public configuration keeps booking disabled. The candidate implements the real booking journey, but provider acceptance is incomplete. The form remains a non-submitting preview until that environment is explicitly enabled. See [integration evidence](docs/V1-INTEGRATION-2026-09-27.md) for current deployment and test status.
 
 ## Check
 
     npm ci
     npm test
 
-The check validates internal anchors, local resources, the root CNAME, and the booking-rule boundary cases.
+Checks cover internal anchors/resources/CNAME, booking economics and availability, backend lifecycle/security, provider adapters, frontend recovery and the local OAuth helper. Local workerd tests verify SQLite persistence and concurrency; they are distinct from real-provider acceptance.
 
 ## Booking system status
 
 The authoritative booking rules are in [docs/BOOKING_SYSTEM_SPEC.md](docs/BOOKING_SYSTEM_SPEC.md). The pricing section explains how supported places grow. The booking calculation and transactional gate contract live in [booking](booking); their architecture and outstanding integration decisions are recorded in [BOOKING_IMPLEMENTATION.md](BOOKING_IMPLEMENTATION.md).
 
-The gate is local server-only code. The public form remains a non-submitting preview. No Calendly, Stripe or Google Calendar account is connected by this repository, and no service credentials belong in GitHub Pages JavaScript.
+The server uses a Cloudflare Worker and SQLite Durable Object, Stripe Checkout, Google Calendar + Meet, and Resend. Staging is deployed with booking disabled while provider verification is completed. Jonny approved direct Google scheduling after Calendly could not meet the no-bypass rule. No service credential belongs in GitHub Pages JavaScript. Deployment and operation are described in [backend setup](backend/README.md).
+
+`node scripts/build-staging.js` assembles an explicit allowlist of public assets in ignored `.local/staging-assets`, with a staging banner and noindex. `npm run build:backend` builds that default-disabled preview and performs a deployment dry run. It does not publish. The production CNAME and private source/credentials are excluded from the staging assets.
 
 ## Publishing
 
