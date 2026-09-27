@@ -1,85 +1,43 @@
-# Booking and solidarity access: implementation note
+# Booking implementation and launch boundary
 
-Status: local rule implementation and architecture proposal only. No booking endpoint, payment flow, provider credentials, or live integration has been deployed.
+Status: **local domain implementation only**, 27 September 2026. Nothing in `booking/` is deployed or imported by the static website. The public booking preview still does not submit or take payment. This note supersedes its earlier one-hour-only draft while preserving the approved economic model. Product authority: [booking specification v1.1](docs/BOOKING_SYSTEM_SPEC.md) and [current decisions](docs/PROJECT_MEMORY.md#current-booking-design-decisions--27-september-2026).
 
-Authority: [docs/BOOKING_SYSTEM_SPEC.md](docs/BOOKING_SYSTEM_SPEC.md), version 1.0, 25 September 2026. SHA-256 at implementation: DAADB40EFA00CD298EA71C14A9BE1D06C1D4BA96CA0B75031E55E2CD9A90DEC3. Keep that source authoritative if this note differs from it.
+## Implemented locally
 
-## Current website audit
+- `booking/rules.js`: five server-mapped offers; 10 *paid client hours* per London week; a £100/£140 double is one appointment with two standard/solidarity units. The original two supported places, solidarity-funded growth, repair-capacity test and normal full-week £500 floor remain. Reserved holds consume hours without prematurely unlocking supported places. No client-identity cap on repeat supported bookings.
+- `booking/state.js`: valid records, London date/week derivation, confirmed versus reserved hours and slot occupancy. Expired unpaid holds cease reserving; paid pending and confirmation-in-progress bookings stay reserved. Cancellation pending continues to occupy until the provider confirms cancellation.
+- `booking/availability.js`: weekday/weekend client windows, 48-hour notice, rolling 28-day horizon, 30-minute prep/decompression buffers, full 60-minute separation, one weekend client per day, dated openings, and fail-closed Primary/Work/Home busy-calendar input. A live adapter must supply fresh calendar and Calendly availability; an absent adapter cannot imply free time.
+- `booking/gate.js`: serialized transaction contract for whole-appointment hold, payment, confirmation, failure, cancellation, refund initiation and human-mediated reschedule. Durable pending/retry/alert fields are set on provider failure. This is a local state machine; its in-memory test store does **not** prove production durability.
+- `booking/provider_contracts.js`: trusted amount/duration mapping for Stripe Checkout, whole-duration Calendly request mapping, full-refund intent with a stable key, distinct transactional-email and human-alert intents. Only opaque booking references should enter provider metadata. The human destination is `jonathan@tachyharmonic.ai`; the transactional sender is still unchosen.
+- `booking/booking.test.js`: domain and state tests, including exhaustive reachable full-week revenue, doubles, calendar/buffer boundaries, concurrency against a serial test store, expiration, failure, refund pending, cancellation and rescheduling.
 
-| Requirement | Current website state |
-| --- | --- |
-| Three rates and the same 60-minute session | Already shown in pricing and the intake preview. |
-| Two initial supported places and automatic growth from the third solidarity booking | Added to the public pricing explanation. |
-| Ten sessions per London Monday–Sunday week | Implemented in server-only rules; no live booking enforcement yet. |
-| £500 floor for a full normal week | Enforced by the rate decision rule and tested for every state reachable from an empty week. |
-| Cancellation and cross-week reschedule recalculation | Implemented in the local transactional gate contract; not connected to Calendly. |
-| Secure booking, payment and calendar flow | Not connected. The public form remains a clearly labelled, non-submitting preview. |
-| Secrets outside GitHub Pages | No provider secrets exist in the public site or repository. |
+## Minimal controlled journey
 
-## Exact booking decision
+1. The static site calls a separate HTTPS backend. The backend reads Calendly's available times for a **gated** 60- or 120-minute event type, obtains current busy intervals from Primary/Work/Home, evaluates local availability and weekly rate eligibility, and returns only public slots/offers. It must not return Calendly's direct `scheduling_url` or a secret. A displayed slot is provisional.
+2. A visitor selects an offer and time. The backend repeats the provider/calendar checks, then calls `BookingGate.hold` within a durable serialized transaction. One id reserves the entire double. The backend creates a server-priced Stripe Checkout Session with a stable idempotency key and an opaque booking reference. An unpaid hold expires after at most 15 minutes. The server owns rate-to-amount mapping; browser amounts are ignored.
+3. A verified Stripe webhook confirms successful payment; a return-page visit does not. The gate records payment and retains both units while the backend rechecks the Calendly time and creates **one** invitee/appointment. Provider confirmation, not payment, makes the booking confirmed. If appointment creation fails definitively, mark booking failed, promptly initiate a full refund, send truthful status and alert Jonathan. If the provider response is uncertain, keep a protected pending state and reconcile by provider identity before retrying creation. Late payment after hold expiry follows the failed-booking/refund path.
+4. A controlled 24+ hour cancellation first requests cancellation of the whole Calendly appointment. Until verified, the slot remains protected and the visitor sees *pending*. After Calendly confirms cancellation, release the units and create a full Stripe refund using the saved payment identity and a stable idempotency key. Only a verified refund-creation response permits *refund initiated* wording; bank posting is later. Errors remain durable pending/retry/alert work. An under-24-hour request stays booked and goes to Jonathan for review, with no automatic refund/forfeiture. Consumer-rights wording must be legally checked against the finished flow.
+5. Launch rescheduling goes through Jonathan. The internal gate rechecks the new whole appointment, week capacity, rate, calendars and buffers, and atomically moves its record. External Calendly change must then be reconciled; native self-service reschedule links must not bypass the gate.
+6. Booking, cancellation, failure, refund and review messages are sent by a **separate** verified transactional-mail provider through idempotent event intents. The Porkbun mailbox receives human correspondence and alerts; it is not the automation sender. Delivery failures need durable retry and monitoring.
 
-For active confirmed sessions whose session date is in the same Europe/London Monday–Sunday week, low, standard and high count £30, £50 and £70 bookings. Total is their sum; capacity is 10. Revenue is 30 × low + 50 × standard + 70 × high, equivalently 50 × total + 20 × (high − low).
+The backend store must serialize read-check-write for **all** booking weeks, persist before and after external calls, and support stable idempotency/event IDs. A single transaction domain simplifies cross-week moves. Provider calls cannot run inside a database transaction. Signed Stripe and Calendly webhooks, periodic reconciliation, duplicate/out-of-order handling and private logs are required. No visitor note or other sensitive intake text belongs in Stripe or Calendly metadata. The [intake workflow](docs/INTAKE_NOTE_WORKFLOW.md) remains a separate proposed boundary.
 
-- A £70 booking is allowed whenever total is below 10.
-- A £30 booking is allowed only if the proposed low count is at most max(2, high), and the proposed deficit max(0, low − high) is no greater than the spaces left after booking.
-- A £50 booking is allowed only if that proposed deficit is no greater than the spaces left after booking.
-- No rate is allowed once total reaches 10.
+## What Calendly Standard can supply
 
-This is implemented in booking/rules.js. booking/state.js derives each week from active booking records by the session timestamp, using the IANA Europe/London timezone. booking/gate.js requires a serialized read-check-write store contract; its booking, cancellation and rescheduling operations are not imported by the public website.
+Current official docs say server-side [create invitee](https://developer.calendly.com/api-docs/calendly-api/scheduled-events/create-event-invitee) is available on Standard and above, and [webhooks](https://developer.calendly.com/docs/getting-started/frequently-asked-questions) require a paid plan. [Available times](https://developer.calendly.com/api-docs/calendly-api/event-types/list-event-type-available-times) can be queried by event type (up to 31 days per call), and an [event can be canceled](https://developer.calendly.com/api-docs/calendly-api/scheduled-events/create-scheduled-event-cancellation). Calendly's FAQ says there is no API reschedule endpoint. These are documentation capabilities, **not** confirmation of this account's token scopes or configuration. Calendly can supply availability and the appointment record; it cannot enforce this site's weekly financial rules or payment hold.
 
-Existing supported bookings remain active after a solidarity cancellation. The next rate decisions use the newly derived state. A cross-week reschedule is checked against the destination week and, if accepted, moves one record so both weeks recalculate. Provider-side availability and payment policy are separate checks.
+Create separate gated 60- and 120-minute types later. Preserve settings from four old experimental types only after review; do not edit them in this sprint. Before launch, ensure **all** publicly bookable old/new links and native cancellation/reschedule routes cannot bypass the controlled gate. The current account's event types, Google calendar conflict choices, buffer settings, meeting location, minimum notice and horizon require an account-level test. Calendly's displayed slots are an input, not final proof of valid site availability.
 
-## Proposed production architecture
+## Stripe and refund liquidity
 
-GitHub Pages continues serving the editorial site and a future client interface. That interface may request availability and start a booking through a separate HTTPS API, but it must not receive API tokens, webhook signing secrets, Stripe secret keys, or trusted rate calculations.
+Use server-created [Checkout Sessions](https://docs.stripe.com/api/checkout/sessions/create) and signed webhooks, stable [idempotency keys](https://docs.stripe.com/api/idempotent_requests), and [refund creation](https://docs.stripe.com/api/refunds/create) against the verified PaymentIntent. The request contract fixes 3000/5000/7000/10000/14000 GBP pence from the approved offer. Payment success without a Calendly-confirmed appointment is a failed booking. Do not assume a refund request succeeds merely because it was attempted. Monitor refund results and maintain sufficient practical Stripe balance for future-session refunds until delivery. Check the live payout schedule/balance or an approved reserve before launch; this sprint changes neither.
 
-A concrete candidate is a Cloudflare Worker with one SQLite-backed Durable Object for all Tachyharmonic booking weeks. A single durable object keeps cross-week reschedules and concurrent attempts in one transaction domain. Its durable records would contain provider booking IDs, fixed server-mapped rate, UTC session time, active/canceled status, payment reference, idempotency key and short-lived hold state. The object would derive weekly counts from active records rather than storing mutable L/M/H counters. It would use an atomic transaction for each read-check-write decision. This provider choice needs approval and an account/billing review before deployment.
+## Exact live setup and verification still required
 
-Suggested API boundaries:
+1. Choose and provision a secret-bearing HTTPS backend and **durable transactional** store. Implement the `transact` port and test real concurrency, crashes/restarts, hold expiry, idempotency and cross-week moves. The current serial in-memory store is test-only.
+2. Verify actual Calendly Standard permissions/scopes, event types, availability API, invitee creation/cancellation, webhooks/signatures and three connected Google calendars. Configure and test dedicated gated 60/120-minute types. Resolve legacy public links and native cancel/reschedule bypasses **before** opening paid booking.
+3. Configure Stripe test then live Checkout, price/amount handling, webhook verification and refund permissions. Exercise successful payment/appointment, payment with failed appointment, late/duplicate/out-of-order webhooks, refund failure and settlement. Review payout cadence and refund liquidity with Jonathan before changing a financial setting.
+4. Select/configure a transactional-mail provider and verified sending domain without disturbing Porkbun hosted mail. Add templates, private recipient lookup, retry and delivery monitoring. Human alerts go to `jonathan@tachyharmonic.ai`; Android background notification is an acknowledged mailbox limitation, so critical alerting must not rely on it.
+5. Wire truthful site availability, checkout status and cancellation routes to that backend. Review final consumer-rights wording and privacy handling. Test the integrated desktop/mobile visitor journey, including keyboard and failure paths; obtain Jonathan's acceptance, then decide deployment separately.
 
-1. Availability endpoint: obtain available 60-minute times from Calendly, combine them with the server-calculated weekly rate availability, and return only public slot/rate information.
-2. Hold endpoint: atomically reserve a slot and rate for a short expiry. Pending £70 holds consume provisional capacity but must **not** unlock a new £30 place; that entitlement begins only when the solidarity booking is confirmed. Pending £30 and £50 holds consume their possible rate/capacity conservatively. Expired holds release their capacity.
-3. Checkout endpoint: create a Stripe-hosted Checkout Session on the server for exactly £30, £50 or £70 from the trusted hold, with an idempotency key and an opaque booking reference. Never trust a client-supplied amount.
-4. Stripe webhook endpoint: verify the signature and payment state, deduplicate events, and start confirmation only for a paid hold. A return-page visit alone never confirms a booking.
-5. Confirmation step: atomically mark the paid hold as confirming after rechecking the week, then release the storage transaction. Recheck the chosen Calendly time and create the invitee through its server-side Scheduling API. Keep the hold reserved during that external call. Mark the local booking confirmed only when Calendly reports success; if the external call or final write fails, reconcile against Calendly before retrying or compensating. If Calendly rejects the time, release the hold and follow an agreed rebooking/refund policy.
-6. Calendly webhook endpoint: verify its signature, deduplicate by provider event/invitee identity, fetch canonical invitee status when needed, and reconcile active bookings after creation, cancellation and reschedule. Run a periodic reconciliation against Calendly so a missed or out-of-order webhook cannot leave the local mirror stale.
-
-The public site should never expose a raw Calendly booking link as a shortcut around the gate. A leaked link, a native Calendly reschedule URL, or an unchanged legacy event type that remains publicly bookable could bypass the hard ten-session rule. That risk must be resolved before enabling live bookings.
-
-Cloudflare's SQLite-backed Durable Object storage provides transactional storage; Calendly currently offers server-side available-time and invitee-creation APIs. These are architecture inputs, not an assertion that the connected account has the needed plan or permissions:
-
-- Cloudflare storage: https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/
-- Calendly available times: https://developer.calendly.com/api-docs/calendly-api/event-types/list-event-type-available-times
-- Calendly invitee creation: https://developer.calendly.com/api-docs/calendly-api/scheduled-events/create-event-invitee
-- Calendly webhook signatures: https://developer.calendly.com/api-docs/overview/webhooks/webhook-signatures
-- Stripe Checkout Sessions: https://docs.stripe.com/api/checkout/sessions
-
-## Provider responsibilities and boundaries
-
-**Calendly:** propose a new dedicated 60-minute event type for this gated flow after Jonathan approves it. The four event types listed in the specification (AI Check-in, Clarity Session, Clarity + Synthesis, Conversations on AI) are untouched. Calendly supplies bookable times, creates confirmed invitees, sends booking/cancellation data, and uses its Google Calendar connection for conflicts and confirmed events. Direct invitee creation requires a supported paid Calendly plan; this must be checked on the actual account. Calendly reports reschedules as a canceled invitee and a created invitee. Its API documentation does not currently offer a direct reschedule operation, so a controlled cancel-and-rebook or manual process needs design and approval.
-
-**Stripe:** collects the server-selected rate through Checkout. The backend verifies Stripe webhooks and reconciles payments; Stripe is the payment source of truth. Cancellation refunds, failed bookings after payment, and payment method policy need Jonathan's decision before a live flow.
-
-**Google Calendar:** stays connected to Calendly for conflict checks and confirmed-session placement. The booking gate does not need a Google Calendar credential if Calendly remains the calendar owner for this flow. Confirm the connected calendar and its conflict settings during setup.
-
-## Cancellation and reschedule behaviour
-
-On a cancellation, mark only that confirmed booking inactive, recalculate its session week, retain every other booking, and publish the newly permitted rates. If supported access now exceeds the ceiling, block new supported places; standard bookings are allowed only when the repair-capacity inequality still holds. Solidarity remains allowed while capacity exists.
-
-For a cross-week reschedule, check the destination week before committing, then remove the active booking from the old week and add it to the new week atomically. Recalculate both weeks. Native Calendly reschedule links may bypass this precheck; a live rollout must either route reschedules through the gate or treat them as a manual workflow with reconciliation and a clear exception process. Do not silently cancel a confirmed client to repair an economic imbalance.
-
-## External configuration required before launch
-
-- Approve a serverless host, persistent transactional storage and any billing.
-- Verify Calendly plan/API scopes, create a separate gated 60-minute event type only after approval, and decide how existing public event types count toward the ten-session client capacity.
-- Review Calendly link visibility, confirmation emails, cancellation and native reschedule settings so none bypass the gate. Do not change existing event types as part of this proposal.
-- Connect or verify Google Calendar conflict checking and confirmed-session placement in Calendly; verify meeting location such as Zoom if used.
-- Configure Stripe products/prices or server-created line items for exactly £30/£50/£70, Checkout settings, webhook endpoint and signing secret; decide refund/cancellation timing and what happens if payment succeeds but Calendly booking fails.
-- Store Calendly and Stripe credentials only as server-side environment secrets, with separate test and production values. Configure signed webhooks, strict origin/CORS, rate limiting, idempotency, monitoring and reconciliation alerts.
-- Decide whether the optional intake note should be transmitted at all, where it is stored, and how consent for any AI meeting summary is recorded. The current preview stores neither.
-
-## Test plan and evidence
-
-The local suite in booking/booking.test.js covers all 12 boundary cases in [docs/BOOKING_SYSTEM_SPEC.md](docs/BOOKING_SYSTEM_SPEC.md): initial availability, supported ceiling, repair-capacity examples, third solidarity growth, £500 and £700 full weeks, cancellation, cross-week reschedule, eleventh booking and simultaneous attempts. It also checks BST/GMT week changes, duplicate confirmation, denied reschedule into a full week, invalid inputs, and an exhaustive proof over reachable full-week states.
-
-Before deployment, add adapter and integration tests for real durable transactions, hold expiry, concurrent Checkout completion, duplicated/out-of-order signed webhooks, provider API failure, reconciliation, payment failure/refund, calendar conflict, native reschedule behaviour, and simultaneous bookings against the deployed service. The local in-memory concurrency test verifies the gate contract, not Cloudflare's production adapter.
+No backend host, provider, live event type, payment setting, DNS change, transactional sender, legal text or deployment has been chosen by this local implementation.

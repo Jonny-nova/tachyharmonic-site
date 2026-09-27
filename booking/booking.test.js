@@ -2,35 +2,26 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { CAPACITY, evaluateBooking, rateAvailability, summarize } = require("./rules");
-const { londonWeekKey, weekState } = require("./state");
+const { CAPACITY, evaluateBooking, offerForRate, rateAvailability, summarize } = require("./rules");
+const { londonWeekKey, weekCounts, weekState } = require("./state");
+const { evaluateSlot, providerSlot } = require("./availability");
 const { BookingGate } = require("./gate");
 
-const MONDAY = "2026-03-23T10:00:00Z";
-
-function counts(low, standard, high) {
-  return { low, standard, high };
-}
+const NOW = "2026-09-01T09:00:00Z";
+const MONDAY = "2026-09-07T09:00:00Z"; // 10:00 in London
+const CALENDARS = { Primary: [], Work: [], Home: [] };
+const counts = (low, standard, high) => ({ low, standard, high });
+const confirmed = (id, startsAt, rate) => ({ id, startsAt, rate, status: "confirmed",
+  paymentId: `pay-${id}` });
 
 function available(state) {
-  return Object.fromEntries(
-    Object.entries(rateAvailability(state))
-      .map(([rate, result]) => [Number(rate), result.allowed])
-  );
+  return Object.fromEntries(Object.entries(rateAvailability(state))
+    .map(([rate, result]) => [Number(rate), result.allowed]));
 }
 
-function makeBookings(state, startsAt = MONDAY) {
-  const bookings = [];
-  for (const [prefix, rate, count] of [
-    ["l", 30, state.low],
-    ["m", 50, state.standard],
-    ["h", 70, state.high],
-  ]) {
-    for (let index = 1; index <= count; index++) {
-      bookings.push({ id: prefix + index, rate, startsAt, status: "active" });
-    }
-  }
-  return bookings;
+function hold(id, startsAt = MONDAY, rate = 50, now = NOW) {
+  return { id, startsAt, rate, now, busyByCalendar: CALENDARS,
+    expiresAt: new Date(Date.parse(now) + 10 * 60_000).toISOString() };
 }
 
 class InMemoryTransactionalStore {
@@ -38,185 +29,276 @@ class InMemoryTransactionalStore {
     this.bookings = structuredClone(bookings);
     this.queue = Promise.resolve();
   }
-
   async transact(operation) {
     let release;
-    const currentTurn = new Promise((resolve) => { release = resolve; });
-    const previousTurn = this.queue;
-    this.queue = previousTurn.then(() => currentTurn);
-    await previousTurn;
+    const turn = new Promise((resolve) => { release = resolve; });
+    const previous = this.queue;
+    this.queue = previous.then(() => turn);
+    await previous;
     try {
       const change = operation(structuredClone(this.bookings));
-      if (change && typeof change.then === "function") {
-        throw new Error("Transactions must not await external services");
-      }
-      this.bookings = change.bookings;
+      if (change && typeof change.then === "function") throw new Error("Do not await in transaction");
+      this.bookings = structuredClone(change.bookings);
       return change.result;
-    } finally {
-      release();
-    }
+    } finally { release(); }
   }
-
-  snapshot() {
-    return structuredClone(this.bookings);
-  }
+  snapshot() { return structuredClone(this.bookings); }
 }
 
-test("1. Empty week offers all three rates", () => {
-  assert.deepEqual(available(counts(0, 0, 0)), { 30: true, 50: true, 70: true });
+test("the five indivisible offers map to the approved hourly units", () => {
+  assert.deepEqual(Object.values([30, 50, 70, 100, 140]).map(offerForRate)
+    .map((offer) => [offer.rate, offer.hours, offer.low, offer.standard, offer.high]), [
+      [30, 1, 1, 0, 0], [50, 1, 0, 1, 0], [70, 1, 0, 0, 1],
+      [100, 2, 0, 2, 0], [140, 2, 0, 0, 2],
+    ]);
+  assert.throws(() => offerForRate(60), /Rate must/);
 });
 
-test("2. Two supported places close the £30 rate until solidarity grows it", () => {
-  assert.deepEqual(available(counts(2, 0, 0)), { 30: false, 50: true, 70: true });
+test("the original supported-place and repair boundary cases still hold", () => {
+  assert.deepEqual(available(counts(0, 0, 0)), { 30: true, 50: true, 70: true, 100: true, 140: true });
+  assert.deepEqual(available(counts(2, 0, 0)), { 30: false, 50: true, 70: true, 100: true, 140: true });
+  assert.deepEqual(available(counts(2, 6, 0)), { 30: false, 50: false, 70: true, 100: false, 140: true });
+  assert.deepEqual(available(counts(2, 6, 1)), { 30: false, 50: false, 70: true, 100: false, 140: false });
+  assert.deepEqual(available(counts(2, 5, 2)), { 30: false, 50: true, 70: true, 100: false, 140: false });
+  assert.equal(evaluateBooking(30, counts(2, 4, 3)).after.revenue, 500);
+  assert.equal(summarize(counts(5, 0, 5)).revenue, 500);
+  assert.equal(summarize(counts(0, 0, 10)).revenue, 700);
+  assert.equal(summarize(counts(5, 0, 5)).total, CAPACITY);
 });
 
-test("3. Two supported and six standard leave two repair slots for solidarity", () => {
-  assert.deepEqual(available(counts(2, 6, 0)), { 30: false, 50: false, 70: true });
-  assert.equal(evaluateBooking(50, counts(2, 6, 0)).reason, "repair_capacity");
+test("a £140 double adds two solidarity units and can grow supported capacity", () => {
+  const result = evaluateBooking(140, counts(2, 2, 2));
+  assert.equal(result.allowed, true);
+  assert.equal(result.after.high, 4);
+  assert.equal(result.after.revenue, 440);
+  assert.equal(evaluateBooking(30, result.after).allowed, true);
+  assert.equal(evaluateBooking(30, counts(2, 2, 2), counts(0, 0, 2)).reason, "supported_ceiling");
 });
 
-test("4. With one solidarity and one slot left, only solidarity is allowed", () => {
-  assert.deepEqual(available(counts(2, 6, 1)), { 30: false, 50: false, 70: true });
+test("reserved solidarity does not repair a deficit; reserved hours block a double", () => {
+  assert.equal(evaluateBooking(50, counts(2, 6, 0), counts(0, 0, 1)).reason, "repair_capacity");
+  assert.equal(evaluateBooking(100, counts(0, 8, 0), counts(0, 1, 0)).reason, "capacity");
+  assert.equal(evaluateBooking(140, counts(0, 8, 0)).allowed, true);
 });
 
-test("5. Two supported, five standard, two solidarity allow standard or solidarity", () => {
-  assert.deepEqual(available(counts(2, 5, 2)), { 30: false, 50: true, 70: true });
-});
-
-test("6. The third solidarity booking opens a third supported place", () => {
-  assert.deepEqual(available(counts(2, 4, 3)), { 30: true, 50: true, 70: true });
-  const after = evaluateBooking(30, counts(2, 4, 3)).after;
-  assert.equal(after.total, 10);
-  assert.equal(after.revenue, 500);
-});
-
-test("7. Five supported plus five solidarity fill the week at £500", () => {
-  const state = summarize(counts(5, 0, 5));
-  assert.equal(state.total, CAPACITY);
-  assert.equal(state.revenue, 500);
-  assert.deepEqual(available(state), { 30: false, 50: false, 70: false });
-});
-
-test("8. Ten solidarity bookings fill the week at £700", () => {
-  const state = summarize(counts(0, 0, 10));
-  assert.equal(state.revenue, 700);
-  assert.deepEqual(available(state), { 30: false, 50: false, 70: false });
-});
-
-test("9. Solidarity cancellation retains supported bookings and offers repair", async () => {
-  const store = new InMemoryTransactionalStore(makeBookings(counts(3, 4, 3)));
-  const gate = new BookingGate(store);
-  const canceled = await gate.cancel("h3");
-  assert.equal(canceled.changed, true);
-  assert.deepEqual(
-    { low: canceled.state.low, standard: canceled.state.standard, high: canceled.state.high },
-    counts(3, 4, 2)
-  );
-  assert.equal(store.snapshot().find((booking) => booking.id === "l3").status, "active");
-  assert.deepEqual(available(canceled.state), { 30: false, 50: false, 70: true });
-  assert.equal((await gate.cancel("h3")).changed, false);
-});
-
-test("10. Cross-week reschedule moves the active booking and recalculates both weeks", async () => {
-  const store = new InMemoryTransactionalStore(makeBookings(counts(2, 6, 2)));
-  const gate = new BookingGate(store);
-  const moved = await gate.reschedule("h2", "2026-03-30T10:00:00Z");
-  assert.equal(moved.accepted, true);
-  assert.equal(moved.oldWeek, "2026-03-23");
-  assert.equal(moved.newWeek, "2026-03-30");
-  assert.equal(moved.oldWeekState.total, 9);
-  assert.equal(moved.oldWeekState.high, 1);
-  assert.equal(moved.newWeekState.total, 1);
-  assert.equal(moved.newWeekState.high, 1);
-  assert.deepEqual(available(moved.oldWeekState), { 30: false, 50: false, 70: true });
-});
-
-test("11. An eleventh booking is rejected at every rate", async () => {
-  const store = new InMemoryTransactionalStore(makeBookings(counts(5, 0, 5)));
-  const gate = new BookingGate(store);
-  for (const rate of [30, 50, 70]) {
-    const result = await gate.book({ id: "extra-" + rate, rate, startsAt: MONDAY });
-    assert.equal(result.accepted, false);
-    assert.equal(result.reason, "capacity");
-  }
-  assert.equal(store.snapshot().filter((booking) => booking.status === "active").length, 10);
-});
-
-test("12. Simultaneous attempts cannot bypass capacity or supported entitlement", async () => {
-  const capacityStore = new InMemoryTransactionalStore(makeBookings(counts(0, 9, 0)));
-  const capacityGate = new BookingGate(capacityStore);
-  const capacityAttempts = await Promise.all([
-    capacityGate.book({ id: "a", rate: 50, startsAt: MONDAY }),
-    capacityGate.book({ id: "b", rate: 50, startsAt: MONDAY }),
-  ]);
-  assert.equal(capacityAttempts.filter((result) => result.accepted).length, 1);
-  assert.equal(weekState(capacityStore.snapshot(), "2026-03-23").total, 10);
-
-  const rateStore = new InMemoryTransactionalStore(makeBookings(counts(1, 0, 0)));
-  const rateGate = new BookingGate(rateStore);
-  const rateAttempts = await Promise.all([
-    rateGate.book({ id: "a", rate: 30, startsAt: MONDAY }),
-    rateGate.book({ id: "b", rate: 30, startsAt: MONDAY }),
-  ]);
-  assert.equal(rateAttempts.filter((result) => result.accepted).length, 1);
-  assert.equal(weekState(rateStore.snapshot(), "2026-03-23").low, 2);
-});
-
-test("London session dates set Monday–Sunday weeks across BST and GMT changes", () => {
-  assert.equal(londonWeekKey("2026-03-29T22:30:00Z"), "2026-03-23");
-  assert.equal(londonWeekKey("2026-03-29T23:30:00Z"), "2026-03-30");
-  assert.equal(londonWeekKey("2026-10-25T23:30:00Z"), "2026-10-19");
-  assert.equal(londonWeekKey("2026-10-26T00:30:00Z"), "2026-10-26");
-});
-
-test("Duplicate confirmation is idempotent; conflicting reuse is rejected", async () => {
-  const store = new InMemoryTransactionalStore();
-  const gate = new BookingGate(store);
-  assert.equal((await gate.book({ id: "same", rate: 50, startsAt: MONDAY })).accepted, true);
-  assert.equal((await gate.book({ id: "same", rate: 50, startsAt: MONDAY })).idempotent, true);
-  const conflict = await gate.book({ id: "same", rate: 70, startsAt: MONDAY });
-  assert.equal(conflict.accepted, false);
-  assert.equal(conflict.reason, "booking_id_conflict");
-  assert.equal(store.snapshot().length, 1);
-});
-
-test("Cross-week reschedule into a full week is denied without moving the booking", async () => {
-  const oldBooking = { id: "moving", rate: 30, startsAt: MONDAY, status: "active" };
-  const fullNewWeek = makeBookings(counts(5, 0, 5), "2026-03-30T10:00:00Z")
-    .map((booking) => ({ ...booking, id: "new-" + booking.id }));
-  const store = new InMemoryTransactionalStore([oldBooking, ...fullNewWeek]);
-  const gate = new BookingGate(store);
-  const result = await gate.reschedule("moving", "2026-03-30T10:00:00Z");
-  assert.equal(result.accepted, false);
-  assert.equal(result.reason, "capacity");
-  assert.equal(store.snapshot().find((booking) => booking.id === "moving").startsAt, MONDAY);
-});
-
-test("Every full week reachable from an empty week satisfies the £500 floor", () => {
+test("every full week reachable using all five offers preserves the £500 floor", () => {
   const queue = [counts(0, 0, 0)];
-  const visited = new Set();
+  const seen = new Set();
   while (queue.length) {
     const current = queue.shift();
     const key = [current.low, current.standard, current.high].join(",");
-    if (visited.has(key)) continue;
-    visited.add(key);
+    if (seen.has(key)) continue;
+    seen.add(key);
     const state = summarize(current);
     if (state.total === CAPACITY) {
-      assert.ok(state.revenue >= 500, key + " returned less than £500");
-      assert.ok(state.high >= state.low, key + " has an uncovered supported deficit");
+      assert.ok(state.revenue >= 500, key);
+      assert.ok(state.high >= state.low, key);
       continue;
     }
-    for (const rate of [30, 50, 70]) {
+    for (const rate of [30, 50, 70, 100, 140]) {
       const decision = evaluateBooking(rate, current);
       if (decision.allowed) queue.push(decision.after);
     }
   }
-  assert.ok(visited.size > 20);
+  assert.ok(seen.size > 100);
 });
 
-test("Invalid rate and timezone-free start time are rejected", () => {
-  assert.throws(() => evaluateBooking(40, counts(0, 0, 0)), /Rate must/);
+test("week state counts two-hour appointments as two units across London week boundaries", () => {
+  assert.equal(londonWeekKey("2026-03-29T22:30:00Z"), "2026-03-23");
+  assert.equal(londonWeekKey("2026-03-29T23:30:00Z"), "2026-03-30");
+  assert.equal(londonWeekKey("2026-10-25T23:30:00Z"), "2026-10-19");
+  assert.equal(londonWeekKey("2026-10-26T00:30:00Z"), "2026-10-26");
+  assert.deepEqual(weekState([confirmed("double", MONDAY, 140)], "2026-09-07").high, 2);
+});
+
+test("availability applies London windows, notice, horizon, and date openings", () => {
+  const check = (startsAt, rate = 50, extra = {}) => evaluateSlot({
+    startsAt, rate, now: NOW, busyByCalendar: CALENDARS, ...extra,
+  });
+  assert.equal(check(MONDAY).available, true);
+  assert.equal(check("2026-09-09T12:00:00Z", 100).reason, "outside_window"); // Wed 13–15
+  assert.equal(check("2026-09-11T09:00:00Z").reason, "outside_window"); // Fri 10
+  assert.equal(check("2026-09-03T08:59:00Z").reason, "minimum_notice");
+  assert.equal(check("2026-09-30T09:00:00Z").reason, "booking_horizon");
+  assert.equal(check("2026-09-11T09:00:00Z", 50, {
+    openings: [{ date: "2026-09-11", start: "10:00", end: "11:00" }],
+  }).available, true);
+});
+
+test("preparation/decompression and the 60-minute gap protect separate appointments", () => {
+  const bookings = [confirmed("first", MONDAY, 50)];
+  assert.equal(evaluateSlot({ startsAt: "2026-09-07T10:30:00Z", rate: 50,
+    now: NOW, bookings, busyByCalendar: CALENDARS }).reason, "client_buffer"); // 11:30 local
+  assert.equal(evaluateSlot({ startsAt: "2026-09-07T11:00:00Z", rate: 50,
+    now: NOW, bookings, busyByCalendar: CALENDARS }).available, true); // 12:00 local
+  assert.equal(evaluateSlot({ startsAt: MONDAY, rate: 50, now: NOW,
+    busyByCalendar: { ...CALENDARS, Work: [{ startsAt: "2026-09-07T08:45:00Z",
+      endsAt: "2026-09-07T09:00:00Z" }] } }).reason, "calendar_busy");
+  assert.throws(() => evaluateSlot({ startsAt: MONDAY, rate: 50, now: NOW,
+    busyByCalendar: { Primary: [], Work: [] } }), /Primary, Work, and Home/);
+});
+
+test("weekend permits one whole client appointment even with a separate opening", () => {
+  const saturday = "2026-09-12T11:00:00Z"; // 12:00 local
+  const bookings = [confirmed("weekend", saturday, 50)];
+  assert.equal(evaluateSlot({ startsAt: "2026-09-12T14:00:00Z", rate: 50,
+    now: NOW, bookings, busyByCalendar: CALENDARS,
+    openings: [{ date: "2026-09-12", start: "15:00", end: "16:00" }] }).reason,
+  "weekend_one_appointment");
+  assert.equal(evaluateSlot({ startsAt: saturday, rate: 100,
+    now: NOW, busyByCalendar: CALENDARS }).available, true);
+});
+
+test("provider availability fails closed when a calendar or scheduler adapter is absent", async () => {
+  await assert.rejects(providerSlot({ startsAt: MONDAY, rate: 50, now: NOW }), /adapters/);
+  const calendar = { getBusy: async () => CALENDARS };
+  const scheduler = { isAvailable: async () => false };
+  assert.equal((await providerSlot({ calendar, scheduler, startsAt: MONDAY, rate: 50,
+    now: NOW })).reason, "scheduler_unavailable");
+});
+
+test("two-hour hold, payment and confirmation stay one atomic appointment", async () => {
+  const store = new InMemoryTransactionalStore();
+  const gate = new BookingGate(store);
+  const request = hold("double", MONDAY, 100);
+  assert.equal((await gate.hold(request)).accepted, true);
+  assert.equal((await gate.hold(request)).idempotent, true);
+  assert.equal(weekCounts(store.snapshot(), "2026-09-07", NOW).reserved.standard, 2);
+  assert.equal((await gate.recordPayment({ id: "double", paymentId: "pay-1", now: NOW })).accepted, true);
+  assert.equal((await gate.beginConfirmation("double")).accepted, true);
+  assert.equal((await gate.confirmAppointment({ id: "double", appointmentId: "cal-1" })).accepted, true);
+  assert.equal((await gate.confirmAppointment({ id: "double", appointmentId: "cal-1" })).idempotent, true);
+  assert.equal(store.snapshot().length, 1);
+  assert.equal(weekState(store.snapshot(), "2026-09-07").standard, 2);
+  assert.equal(weekState(store.snapshot(), "2026-09-07").revenue, 100);
+});
+
+test("simultaneous double holds cannot oversubscribe the last two hours or same time", async () => {
+  const fixtures = [
+    ["2026-09-07", [9, 11, 13]], ["2026-09-08", [9, 11, 13]],
+    ["2026-09-09", [9, 11]],
+  ].flatMap(([day, hours], dayIndex) => hours.map((hour, index) =>
+    confirmed(`${dayIndex}-${index}`, `${day}T${String(hour).padStart(2, "0")}:00:00Z`, 50)));
+  const store = new InMemoryTransactionalStore(fixtures);
+  const gate = new BookingGate(store);
+  const thursday = "2026-09-10T09:00:00Z";
+  const results = await Promise.all([
+    gate.hold(hold("first", thursday, 100)),
+    gate.hold(hold("second", thursday, 100)),
+  ]);
+  assert.equal(results.filter((result) => result.accepted).length, 1);
+  assert.equal(weekCounts(store.snapshot(), "2026-09-07", NOW).reserved.total, 2);
+  assert.equal((await gate.hold(hold("third", "2026-09-11T11:00:00Z", 50))).reason, "capacity");
+});
+
+test("paid hold after expiry becomes a failed booking with refund and alert pending", async () => {
+  const store = new InMemoryTransactionalStore();
+  const gate = new BookingGate(store);
+  await gate.hold(hold("late"));
+  const result = await gate.recordPayment({ id: "late", paymentId: "pay-late",
+    now: "2026-09-01T09:11:00Z" });
+  assert.equal(result.accepted, false);
+  assert.equal(result.refundPending, true);
+  assert.equal(store.snapshot()[0].status, "booking_failed");
+  assert.equal(weekCounts(store.snapshot(), "2026-09-07", NOW).reserved.total, 0);
+  assert.equal((await gate.recordRefundInitiated({ id: "late", refundId: "refund-late" })).refundInitiated, true);
+  assert.equal((await gate.recordRefundInitiated({ id: "late", refundId: "refund-late" })).idempotent, true);
+});
+
+test("known appointment failure releases all units and requests a refund, without claiming one", async () => {
+  const store = new InMemoryTransactionalStore();
+  const gate = new BookingGate(store);
+  await gate.hold(hold("failed", MONDAY, 140));
+  await gate.recordPayment({ id: "failed", paymentId: "pay-failed", now: NOW });
+  await gate.beginConfirmation("failed");
+  const result = await gate.failBooking({ id: "failed", code: "slot_rejected" });
+  assert.equal(result.bookingConfirmed, false);
+  assert.equal(result.refundPending, true);
+  assert.equal(weekCounts(store.snapshot(), "2026-09-07", NOW).reserved.total, 0);
+  assert.equal(store.snapshot()[0].refundStatus, "pending");
+});
+
+test("an unpaid failed hold cannot be marked refunded", async () => {
+  const store = new InMemoryTransactionalStore();
+  const gate = new BookingGate(store);
+  await gate.hold(hold("unpaid"));
+  await gate.failBooking({ id: "unpaid", code: "checkout_failed" });
+  const result = await gate.recordRefundInitiated({ id: "unpaid", refundId: "refund-phantom" });
+  assert.equal(result.changed, false);
+  assert.equal(result.reason, "invalid_state");
+  assert.equal(store.snapshot()[0].refundStatus, "none");
+});
+
+test("24+ hour whole-appointment cancellation remains honest through provider/refund failures", async () => {
+  const store = new InMemoryTransactionalStore([confirmed("double", MONDAY, 140)]);
+  const gate = new BookingGate(store);
+  const request = await gate.requestCancellation({ id: "double", now: NOW });
+  assert.equal(request.status, "cancellation_pending");
+  assert.equal(request.refundInitiated, false);
+  assert.equal(weekState(store.snapshot(), "2026-09-07").high, 2);
+  await gate.recordActionFailure({ id: "double", action: "provider_cancellation", code: "timeout" });
+  assert.equal(store.snapshot()[0].alertPending, true);
+  assert.equal((await gate.recordProviderCanceled({ id: "double", providerCancellationId: "cancel-1" })).capacityReleased, true);
+  assert.equal(weekState(store.snapshot(), "2026-09-07").total, 0);
+  await gate.recordActionFailure({ id: "double", action: "refund", code: "provider_unavailable" });
+  assert.equal(store.snapshot()[0].status, "cancellation_pending");
+  assert.equal(store.snapshot()[0].refundStatus, "pending");
+  assert.equal((await gate.recordRefundInitiated({ id: "double", refundId: "refund-1" })).status, "canceled");
+  assert.equal((await gate.recordActionFailure({ id: "double", action: "refund",
+    code: "late_timeout" })).reason, "invalid_state");
+  assert.equal(store.snapshot()[0].refundStatus, "initiated");
+  assert.equal((await gate.requestCancellation({ id: "double", now: NOW })).idempotent, true);
+});
+
+test("under-24-hour cancellation is human review only and retains the appointment", async () => {
+  const store = new InMemoryTransactionalStore([confirmed("short", MONDAY, 100)]);
+  const gate = new BookingGate(store);
+  const result = await gate.requestCancellation({ id: "short", now: "2026-09-06T12:00:00Z" });
+  assert.equal(result.humanReview, true);
+  assert.equal(result.appointmentCanceled, false);
+  assert.equal(result.refundInitiated, false);
+  assert.equal(weekState(store.snapshot(), "2026-09-07").standard, 2);
+});
+
+test("human-mediated reschedule moves a whole double across weeks or denies it atomically", async () => {
+  const store = new InMemoryTransactionalStore([confirmed("moving", MONDAY, 100)]);
+  const gate = new BookingGate(store);
+  const newStart = "2026-09-14T09:00:00Z";
+  const moved = await gate.reschedule("moving", newStart, { now: NOW, busyByCalendar: CALENDARS });
+  assert.equal(moved.accepted, true);
+  assert.equal(moved.oldWeekState.total, 0);
+  assert.equal(moved.newWeekState.standard, 2);
+  const blocked = await gate.reschedule("moving", "2026-09-14T11:00:00Z", {
+    now: NOW, busyByCalendar: { ...CALENDARS, Home: [{
+      startsAt: "2026-09-14T10:30:00Z", endsAt: "2026-09-14T11:30:00Z",
+    }] },
+  });
+  assert.equal(blocked.accepted, false);
+  assert.equal(store.snapshot()[0].startsAt, newStart);
+});
+
+test("invalid inputs cannot enter the weekly state", () => {
   assert.throws(() => londonWeekKey("2026-03-23T10:00:00"), /timezone/);
   assert.throws(() => londonWeekKey("2026-02-30T10:00:00Z"), /invalid/);
   assert.throws(() => weekState([], "2026-03-24"), /Monday/);
+  assert.throws(() => weekState([confirmed("wrong", MONDAY, 60)], "2026-09-07"), /Rate must/);
+});
+
+test("provider contracts keep price, duration and sender under server control", () => {
+  const { checkoutIntent, calendlyIntent, refundIntent, systemMessage, humanAlert } =
+    require("./provider_contracts");
+  assert.deepEqual(checkoutIntent({ id: "double", rate: 140 }), {
+    bookingId: "double", currency: "gbp", amountPence: 14000,
+    durationMinutes: 120, mode: "payment", idempotencyKey: "checkout:double",
+  });
+  assert.equal(calendlyIntent({ id: "double", rate: 140, startsAt: MONDAY,
+    invitee: { email: "visitor@example.com" } }, { 120: "event-type-120" }).durationMinutes, 120);
+  assert.throws(() => calendlyIntent({ id: "double", rate: 140, startsAt: MONDAY,
+    invitee: { email: "visitor@example.com" } }, { 60: "event-type-60" }), /gated/);
+  assert.equal(refundIntent({ id: "double", paymentIntentId: "pi_123", rate: 140 }).amountPence, 14000);
+  assert.equal(systemMessage({ id: "double", event: "booking_confirmed",
+    to: "visitor@example.com" }).sender, "transactional_provider_required");
+  assert.equal(humanAlert({ id: "double", event: "booking_failed" }).to,
+    "jonathan@tachyharmonic.ai");
+  assert.throws(() => checkoutIntent({ id: "double", rate: 60 }), /Rate/);
 });
