@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tachyharmonic-booking-production",
+  "main": "backend/worker.mjs",
+  "compatibility_date": "2026-09-27",
+  "account_id": "94f6b81f48f6add96f057384b0288167",
+  "workers_dev": true,
+  "durable_objects": { "bindings": [{ "name": "BOOKING_OFFICE", "class_name": "BookingOffice" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["BookingOffice"] }],
+  "vars": {
+    "BOOKING_ENABLED": "false",
+    "ALLOW_LIVE_PAYMENTS": "false",
+    "STRIPE_MODE": "live",
+    "SCHEDULER_PROVIDER": "google",
+    "CALENDAR_SOURCE": "google",
+    "CONSENT_VERSION": "v1-2026-09-27",
+    "ALLOWED_ORIGINS": "https://tachyharmonic.ai",
+    "MANAGEMENT_BASE_URL": "https://tachyharmonic.ai/",
+    "CHECKOUT_SUCCESS_URL": "https://tachyharmonic.ai/",
+    "CHECKOUT_CANCEL_URL": "https://tachyharmonic.ai/",
+    "STRIPE_INTEGRATION_IDENTIFIER": "tachyharmonic-v1-live-abcdefgh",
+    "TRANSACTIONAL_FROM": "Tachyharmonic <bookings@bookings.tachyharmonic.ai>",
+    "TRANSACTIONAL_DOMAIN_VERIFIED": "true",
+    "DATE_OPENINGS": "[]"
+  },
+  "observability": { "enabled": false }
+}

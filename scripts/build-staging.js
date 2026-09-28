@@ -24,6 +24,10 @@ const pagePath = path.join(output, "index.html");
 fs.writeFileSync(pagePath, fs.readFileSync(pagePath, "utf8")
   .replace("<head>", '<head>\n  <meta name="robots" content="noindex,nofollow">')
   .replace("<body>", '<body>\n  <p role="note" style="margin:0;padding:12px;text-align:center;background:#fff3cd;color:#332701">Staging review candidate · Stripe sandbox payments only · Not open for client bookings.</p>'));
+const termsPath = path.join(output, "terms.html");
+fs.writeFileSync(termsPath, fs.readFileSync(termsPath, "utf8")
+  .replace("<head>", '<head>\n  <meta name="robots" content="noindex,nofollow">')
+  .replace("<h1>Booking, cancellation and privacy</h1>", '<h1>Booking, cancellation and privacy</h1>\n  <p class="candidate-notice">Staging review candidate. Sandbox bookings are for testing only. Public booking is not open.</p>'));
 fs.writeFileSync(path.join(output, "js", "booking-config.js"),
   `"use strict";\nwindow.TACHYHARMONIC_BOOKING = Object.freeze(${JSON.stringify({ enabled, apiBase: origin, consentVersion: "v1-2026-09-27" })});\n`);
 fs.writeFileSync(path.join(output, "robots.txt"), "User-agent: *\nDisallow: /\n");

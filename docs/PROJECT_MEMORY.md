@@ -1,5 +1,11 @@
 # Website project memory
 
+## Production launch gate — 28 September 2026
+
+Google Auth Platform for the existing `tachyharmonic-booking` project is now **In production** with only `calendar.events.owned` and `calendar.events.freebusy`. Fresh owner consent yielded an offline refresh token; the new grant refreshed successfully with those two scopes and no seven-day Testing expiry field. Primary/Work/Home conflict reads and controlled event/Meet creation, retry identity and cleanup passed locally and on the deployed staging Worker. Staging booking remains enabled for test payments only, its Google token and approved trader address are encrypted secrets, and its provider probe is disabled again.
+
+A separate production Worker is deployed without a public site route, with its own Durable Object and `BOOKING_ENABLED=false`, `ALLOW_LIVE_PAYMENTS=false`. Live Stripe Payments/Payouts are active and GBP payouts remain manual. A production webhook destination exists but is Disabled pending secure key handoff and authorized validation. No live charge, refund, merge or `tachyharmonic.ai` publication has occurred. Source terms now omit staging-only notices; the staging build adds them back to its copy. The checked-in frontend remains disabled. The [production gate record](V1-PRODUCTION-GATE-2026-09-28.md) holds current configuration, evidence and open decisions; the [retention procedure](BOOKING-DATA-RETENTION.md) still needs Jonathan's launch acceptance and monthly execution. Earlier checkpoints below are historical.
+
 ## Current launch-candidate state — 28 September 2026
 
 The [final staging acceptance record](V1-LAUNCH-CANDIDATE-2026-09-28.md) supersedes the incomplete checkpoints below. All five browser-paid offers confirmed with Calendar/Meet, delivered confirmation and completed whole cancellation/full sandbox refund. Deployed concurrency/capacity, conflict, lost-response, decline, abandoned/stale Checkout, delayed/duplicate/out-of-order event, refund outage and email recovery tests passed. One deliberate Stripe refund-failure fixture is explicitly terminal attention-required, with no appointment or pending automatic job; it is not described as refunded.

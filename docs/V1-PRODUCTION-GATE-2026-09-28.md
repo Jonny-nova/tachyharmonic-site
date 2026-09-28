@@ -1,0 +1,35 @@
+# V1 production gate — 28 September 2026
+
+This record supplements [the accepted staging candidate](V1-LAUNCH-CANDIDATE-2026-09-28.md). It records observed account and deployment state; it does not authorize a live charge, merge or publication on `tachyharmonic.ai`.
+
+## Google OAuth durability
+
+- The existing `tachyharmonic-booking` Google Cloud project and OAuth client remain in use. The host authorization is for `mrbonello@gmail.com`; visitors do not authorize Google accounts.
+- The only requested scopes are `https://www.googleapis.com/auth/calendar.events.owned` and `https://www.googleapis.com/auth/calendar.events.freebusy`. They were registered in Data Access without expansion.
+- The OAuth Audience was changed from **Testing** to **In production**. Google's unverified-app warning and 100-user cap remain; the host-only personal-use exception permits operation without full OAuth verification. The previous Testing grant's lifetime was not assumed to change retroactively.
+- Fresh consent on the published app yielded a new offline refresh token in an ignored, owner-restricted local file. A fresh refresh-token exchange returned an access token with exactly the two scopes and no `refresh_token_expires_in` field. This removes the documented Testing-mode seven-day limit, although no calendar credential can be empirically proven to survive seven days on the day it is issued. Ordinary revocation/inactivity risks still apply.
+- The new grant returned successful free/busy results for Primary, Work and Home. A controlled one-hour event at 2026-10-06 10:00–11:00 UTC had the intended attendee and Meet link, produced the same event on retry, and was removed with verified cleanup.
+- The new refresh token was rotated into the encrypted **staging** Worker secret. The deployed staging-only probe repeated three-calendar reads, one-hour event/Meet creation, identical retry and verified cleanup at 2026-10-06 11:00–12:00 UTC. `STAGING_PROVIDER_CHECKS` was restored to `false`; staging booking stayed enabled.
+
+Google's documentation: [Testing token expiration](https://developers.google.com/identity/protocols/oauth2#expiration), [personal-use verification exception](https://support.google.com/cloud/answer/13464323?hl=en), [published unverified-app behavior](https://developers.google.com/identity/protocols/oauth2/production-readiness/overview).
+
+## Production backend and live Stripe
+
+- A **separate** Worker, `tachyharmonic-booking-production`, was deployed at `https://tachyharmonic-booking-production.tachyharmonic-site.workers.dev` from `wrangler.production.jsonc`. It has its own SQLite Durable Object namespace. No custom domain was attached and no static site was published there.
+- The production Worker has `BOOKING_ENABLED=false`, `ALLOW_LIVE_PAYMENTS=false`, and `STRIPE_MODE=live`. Health returned 200/disabled; an availability request returned `booking_unavailable` (503). The production frontend remains disabled.
+- Eleven encrypted production secrets were installed: the fresh Google client/grant, three conflict-calendar IDs plus booking calendar, Resend sender key, approved trader address, and freshly generated **production-only** admin/signing keys. The local operator bundle is ignored by Git and owner-restricted. It contains no live Stripe key.
+- The live Stripe account was observed with Payments and Payouts active and no active verification tasks. The GBP payout schedule remained **manual**; it was not changed. The backend creates trusted dynamic Checkout price data for £30, £50, £70, £100 and £140, so separate catalog prices are not required.
+- A live Stripe webhook destination was created for the production Worker at `/api/webhooks/stripe`, with API version `2026-08-26.dahlia` and exactly `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `refund.created`, `refund.failed`, and `refund.updated`. Its destination ID is `we_1UKa9vBfj5pOIaWXOL3Hf9px`. It was left **Disabled** until the live signing secret and API key are installed and an authorized validation is ready.
+- The existing live standard secret key and the new webhook signing secret are visible only in Stripe's protected Dashboard controls. Their matching **Secret** fields, `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, were prepared in the production Cloudflare Worker settings for owner-only secure entry. No live key was put in chat, tracked files or staging. No live charge or refund occurred.
+
+## Legal, privacy and operational gate
+
+The candidate terms describe a four-week booking horizon, 48-hour minimum notice, the separate 24-hour full-refund policy, under-24-hour personal review subject to statutory rights, express early-performance request, full refund if paid booking creation fails, pending/refund-initiated states, geographic trader contact and the actual provider/transfer categories. The separate, initially unchecked early-performance wording is recorded in the durable contract snapshot. The relevant primary sources are the [Consumer Contracts Regulations 2013](https://www.legislation.gov.uk/uksi/2013/3134), [GOV.UK distance-selling guidance](https://www.gov.uk/online-and-distance-selling-for-businesses), and [ICO storage-limitation guidance](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/data-protection-principles/a-guide-to-the-data-protection-principles/storage-limitation/).
+
+The [retention procedure](BOOKING-DATA-RETENTION.md) is prepared but requires Jonathan's launch acceptance and monthly execution. Failed/expired notes and paid-session notes have scheduled cleanup, but complete booking/contact/audit records do not have automatic general deletion. A reviewed maintenance operation is needed when a settled record must be removed. Do not represent review or deletion as already performed.
+
+The source terms no longer carry staging/candidate notices, and the contract snapshot is versioned `booking-terms-v1-2026-09-28`. The staging build adds its own noindex marker and sandbox notice. The checked-in frontend booking switch remains disabled; publication still requires a separate production API configuration and Jonathan's final acceptance of the terms and retention procedure. Neither the live £30 test nor final public legal/retention acceptance has occurred.
+
+## Hold line
+
+Do not enable `BOOKING_ENABLED` or `ALLOW_LIVE_PAYMENTS`, enable the live webhook, merge PR #10, or publish `tachyharmonic.ai` until the live secret handoff and final decision. A controlled £30 live payment/refund remains optional and requires Jonathan's explicit separate approval at the action point.

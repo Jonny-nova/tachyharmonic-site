@@ -4,7 +4,7 @@
 // Jonathan's final review. A version is evidence of the text, not its approval.
 // Persist the returned snapshot with each booking; never rebuild an old
 // booking's confirmation from current configuration or mutable website text.
-const VERSION = 'booking-terms-draft-v1-2026-09-27';
+const VERSION = 'booking-terms-v1-2026-09-28';
 const { WORDING } = require('./consent');
 const CONTACT = 'jonathan@tachyharmonic.ai';
 
