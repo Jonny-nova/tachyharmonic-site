@@ -47,6 +47,16 @@ export class BookingOffice extends DurableObject {
           const supplied = request.headers.get("X-Private-Test-Token");
           if (!this.env.PRIVATE_LIVE_TEST_TOKEN || !supplied || await hash(supplied) !== await hash(this.env.PRIVATE_LIVE_TEST_TOKEN)) throw fail("not_found", 404);
         }
+        if (url.pathname === "/api/admin/retention-inventory") {
+          // Operator API clients only: no browser Origin, no rate-limit write,
+          // alarm scheduling, repairJobs or audit write on this read-only path.
+          if (origin || request.method !== "GET") throw fail("not_found", 404);
+          const token = request.headers.get("Authorization")?.match(/^Bearer (.+)$/)?.[1];
+          if (!this.env.ADMIN_TOKEN || !token || await hash(token) !== await hash(this.env.ADMIN_TOKEN)) throw fail("unauthorized", 401);
+          if ([...url.searchParams.keys()].some(key => !["limit", "cursor"].includes(key))) throw fail("invalid_inventory_query");
+          return reply(await this.service.retentionInventory({ limit: url.searchParams.has("limit") ? url.searchParams.get("limit") : undefined,
+            cursor: url.searchParams.has("cursor") ? url.searchParams.get("cursor") : undefined }), 200);
+        }
         if (origin && allowed.includes(origin)) cors = { "Access-Control-Allow-Origin": origin, "Vary": "Origin", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Authorization,Content-Type,Idempotency-Key" };
         if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
         if (!webhook) {

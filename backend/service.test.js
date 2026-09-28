@@ -35,6 +35,53 @@ function fixture() {
   const input = { startsAt: "2026-10-01T10:00:00.000Z", rate: 100, name: "Example client", email: "client@example.test", note: "PRIVATE EXACT NOTE", managementToken: token, earlyStart: true, consentVersion: "v1-2026-09-27" };
   return { ...database, service, adapters, calls, token, input, setNow: value => { now = value; }, async hold() { return service.hold(input, "test_idempotency_0001"); }, pay(id) { return service.payment({ bookingId: id, paymentId: "pi_1", eventId: "evt_1", amount: 10000, currency: "gbp" }); } };
 }
+test("retention inventory pages every stored booking once without personal data or writes", async () => {
+  const f = fixture(), ids = Array.from({ length: 205 }, (_, i) => `00000000-0000-0000-0000-${String(i + 1).padStart(12, "0")}`);
+  f.store.mutate(state => {
+    for (const [index, id] of ids.entries()) {
+      state.bookings.push({ id, rate: index === 0 ? 100 : 50, startsAt: "2026-09-01T10:00:00Z",
+        status: index === 1 ? "booking_failed" : index === 3 ? "held" : "confirmed",
+        ...(index === 2 ? { paymentId: "pi_secret", refundStatus: "pending" } : {}),
+        ...(index === 3 ? { expiresAt: "2026-09-01T10:15:00Z" } : {}) });
+      state.private[id] = { name: "PERSONAL NAME", email: "secret@example.test", note: index === 0 ? "PRIVATE NOTE" : "",
+        noteDeleteAt: "2026-09-15T00:00:00Z", contractTerms: { traderAddress: "PRIVATE ADDRESS" } };
+    }
+    state.jobs["private-job"] = { id: ids[2], kind: "refund", status: "pending", snapshot: { email: "secret@example.test" } };
+  });
+  const before = JSON.stringify(f.store.read()), auditBefore = f.db.prepare("SELECT COUNT(*) AS count FROM audit").get().count;
+  const seen = [], pages = []; let cursor;
+  do {
+    const page = await f.service.retentionInventory({ limit: 37, cursor }); pages.push(page);
+    assert.equal(page.total, 205); assert.ok(page.records.length <= 37);
+    seen.push(...page.records.map(record => record.id)); cursor = page.nextCursor || undefined;
+  } while (cursor);
+  assert.equal(pages.length, 6); assert.deepEqual(seen.sort(), ids);
+  assert.equal(pages[0].records[0].hourlyUnits, 2);
+  assert.equal(pages[0].records[0].noteStatus, "due_uncleared");
+  assert.equal(pages[0].records[0].reviewStatus, "note_clearance_due");
+  assert.equal(pages[0].records[0].retentionReasonRecorded, false);
+  assert.equal(pages[0].records[0].nextReviewDate, null);
+  assert.equal(pages[0].records[1].bookingState, "booking_failed");
+  assert.equal(pages[0].records[2].recoveryState, "unresolved");
+  assert.equal(pages[0].records[3].bookingState, "held");
+  assert.equal(pages[0].records[3].recoveryState, "unresolved");
+  const responseText = JSON.stringify(pages);
+  const cursorText = Buffer.from(pages[0].nextCursor, "base64url").toString("utf8");
+  assert.equal(cursorText.includes(ids[36]), false);
+  for (const privateValue of ["PERSONAL NAME", "secret@example.test", "PRIVATE NOTE", "PRIVATE ADDRESS", "pi_secret", "private-job"]) assert.equal(responseText.includes(privateValue), false);
+  assert.equal(JSON.stringify(f.store.read()), before);
+  assert.equal(f.db.prepare("SELECT COUNT(*) AS count FROM audit").get().count, auditBefore);
+  await assert.rejects(f.service.retentionInventory({ limit: 101 }), /invalid_inventory_limit/);
+  await assert.rejects(f.service.retentionInventory({ cursor: "invalid" }), /invalid_inventory_cursor/);
+  const first = await f.service.retentionInventory({ limit: 1 });
+  f.store.mutate(state => { state.private[ids[0]].note = ""; });
+  await assert.rejects(f.service.retentionInventory({ limit: 1, cursor: first.nextCursor }), /inventory_changed_restart/);
+  f.store.mutate(state => { state.bookings = state.bookings.filter(record => record.id !== ids[4]); delete state.private[ids[4]]; });
+  const afterRemoval = await f.service.retentionInventory();
+  assert.equal(afterRemoval.total, 204); assert.equal(afterRemoval.records.some(record => record.id === ids[4]), false);
+  f.store.mutate(state => { state.bookings.push({ ...state.bookings[0] }); });
+  await assert.rejects(f.service.retentionInventory(), /inventory_duplicate_reference/);
+});
 test("SQLite rolls back gate/private/outbox state together and survives store recreation", async () => {
   const f = fixture(); const held = await f.hold();
   assert.throws(() => f.store.mutate(state => { state.bookings.length = 0; throw new Error("crash"); }));

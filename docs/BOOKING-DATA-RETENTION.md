@@ -1,6 +1,6 @@
 # Booking data retention procedure
 
-Prepared 27 September 2026 for Jonathan's final V1 launch acceptance. This is a proposed operating procedure, not evidence of historical reviews, deletions or provider-account acceptance. Jonathan owns its adoption and execution. No customer data was deleted while preparing it.
+Prepared 27 September 2026 and accepted by Jonathan for the public V1 launch on 28 September 2026, as recorded in [project memory](PROJECT_MEMORY.md). Jonathan owns the monthly judgement and consequential removal decisions. Adoption does not prove that a monthly review or any deletion has happened. Record each run in [the monthly review log](BOOKING-RETENTION-REVIEWS.md).
 
 ## Scope and current implementation
 
@@ -18,6 +18,29 @@ After adoption, Jonathan reviews retained records monthly and when responding to
 4. Where an accounting obligation or actual/potential claim requires retention, identify the applicable obligation or claim and its relevant end/review date. Obtain appropriate advice if unclear. This procedure does not impose an unsupported blanket six-year period or assume that all records have the same legal deadline.
 5. Remove or anonymise data when no documented purpose remains. Review linked provider copies and correspondence as well as the local record. Irreversible anonymisation must remove the ability to reconnect the data to a person; deleting a name alone is insufficient when email, booking references or provider identifiers still identify them.
 6. Record completion and outstanding provider/backup limitations without claiming instantaneous or universal deletion. Schedule the next monthly review.
+
+### Monthly runbook
+
+Review on the 28th of each month, or record the actual date if delayed. Codex may prepare the evidence and draft the log; Jonathan decides the continuing purpose for identifiable records and approves any consequential removal. Use this order:
+
+1. Use the authenticated internal `GET /api/admin/retention-inventory` route on the production Worker to collect every page of opaque booking references and minimal retention fields. Check that the collected count and unique-reference count both equal the route's `total`; if a later page reports `inventory_changed_restart`, restart from page one. Keep responses private and temporary; put only aggregate counts and necessary opaque references in the durable log. The existing per-booking admin route returns personal data and runs `repairJobs`, so use it only for a specific exception that needs investigation. An inventory response is a ledger snapshot, not a Stripe, Calendar, email or backup verification.
+2. Separate settled appointments from unresolved or recovery-state records. For a failed or abandoned checkout, verify Stripe's authoritative payment/Checkout state and possible late events before treating it as settled. For refunds, distinguish initiated, succeeded, failed, pending and attention-required. Investigate unfinished jobs, external calendar changes, complaints and correspondence.
+3. Check each expired/failed note and each note beyond 30 days after appointment start for a cleared value. Record only counts and exceptions, never note text. Check whether any older recovery copy could restore it. Access expiry does not count as note clearing.
+4. For each retained category or exceptional record, write the specific purpose and its next review or known end date. Jonathan decides whether delivery, accounting, an actual or potential claim, a dispute, recovery or a security incident still needs the identifiable data. Seek appropriate advice where the legal period is uncertain. Identify the smaller record that could serve the purpose.
+5. For records with no continuing purpose, draft a per-reference removal or anonymisation plan covering the ledger's private fields, booking state, contract/consent evidence, jobs, event/idempotency and audit dependencies, Stripe, Google events/Meet, Resend, human mailbox and recoverable backups. Check that capacity, payment reconciliation and replay protection still work. Have Jonathan review the exact plan before a consequential change. Validate any approved maintenance on synthetic data, then verify the result and provider requests separately.
+6. Append one dated entry to [the monthly review log](BOOKING-RETENTION-REVIEWS.md): reviewer, evidence and coverage, category counts or exceptions, retained purposes and dates, approved/proposed/completed actions, provider and backup follow-up, unresolved limits, and next review date. Do not put names, email addresses, note text, addresses, message bodies, access links or secrets in it.
+
+If the complete inventory or provider account access is unavailable, record a **partial review** and the precise missing step. A scheduled reminder alone is not a completed review. Respond to deletion requests when received rather than waiting for month end.
+
+### Internal inventory limits
+
+The retention route accepts an administrator bearer credential in a trusted operator API client, with no browser `Origin` header. It is unavailable to public frontend requests, has no write method, does not run `repairJobs`, and does not write an audit row, rate-limit entry or alarm. Responses are `no-store` and capped at 100 records per page (50 by default). A cursor contains only a page position, snapshot digest and review time, so booking references do not enter request URLs; changes require restarting the read. Never paste credentials, full responses or cursors into the review log or routine logs.
+
+Each row contains only the opaque reference, booking state and start, duration/hourly units, note deadline and whether a note is absent, present before its deadline, due but uncleared, or unknown because its private record is missing; payment/refund state, unfinished-job count and recovery status, settled flag, and review status. It contains no name, email, note text, Meet link, payment instrument, provider identifier or message body. Failed and expired bookings remain included while their records remain in the ledger; records actually removed from the ledger are absent. The route does not clear overdue notes or decide whether a payment or claim is finally resolved. Compare any exception with authoritative providers before removal.
+
+V1 has no per-booking retention reason or next-review date stored in the ledger, so the route reports `retentionReasonRecorded: false` and `nextReviewDate: null`. Record human decisions in the dated review log. `needs_jonathan_judgement` means the ledger cannot establish a continuing purpose; it is not a deletion instruction. The route may label an open future booking `delivery_open`. Neither status authorizes automatic erasure.
+
+For the monthly classification, count `note_clearance_due` first and investigate it; count any non-`none` recovery state as unresolved; treat an open future appointment as delivery work. For settled rows, compare the dated review log: a specific purpose with a future review date may be recorded as **retention reason still valid / no action this month**; without that decision, list the opaque reference as **needs Jonathan's judgement**. The route's `settled` flag and payment/refund fields are ledger facts, not a provider-side claim that the customer matter is finally resolved. Keep aggregate counts and only necessary exception references in the log.
 
 ## Performing a removal safely
 

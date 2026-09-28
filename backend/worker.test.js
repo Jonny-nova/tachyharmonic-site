@@ -74,6 +74,27 @@ test("private live validation hides booking APIs from callers without the test t
     assert.equal((await mf.dispatchFetch("https://test.local/api/health")).status, 200);
   } finally { await mf.dispose(); }
 });
+test("retention inventory is admin-only and unavailable to browsers or write methods", { timeout: 120000 }, async () => {
+  const script = buildSync({ entryPoints: [path.join(__dirname, "worker.mjs")], bundle: true, write: false, format: "esm", platform: "browser", external: ["cloudflare:workers"] }).outputFiles[0].text;
+  const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script, compatibilityDate: "2026-09-27",
+    durableObjects: { BOOKING_OFFICE: { className: "BookingOffice", useSQLite: true } },
+    bindings: { BOOKING_ENABLED: "false", ADMIN_TOKEN: "private-admin-token", ALLOWED_ORIGINS: "https://tachyharmonic.ai" } }));
+  const url = "https://api.example.test/api/admin/retention-inventory";
+  try {
+    for (const options of [{}, { headers: { Authorization: "Bearer wrong" } },
+      { headers: { Origin: "https://tachyharmonic.ai", Authorization: "Bearer private-admin-token" } },
+      { method: "POST", headers: { Authorization: "Bearer private-admin-token" }, body: "{}" }]) {
+      const response = await mf.dispatchFetch(url, options);
+      assert.equal(response.status, options.headers?.Origin || options.method ? 404 : 401);
+      assert.equal(response.headers.get("Access-Control-Allow-Origin"), null);
+    }
+    const response = await mf.dispatchFetch(url, { headers: { Authorization: "Bearer private-admin-token" } });
+    assert.equal(response.status, 200); assert.equal(response.headers.get("Cache-Control"), "no-store");
+    const body = await response.json(); assert.ok(Number.isFinite(Date.parse(body.asOf)));
+    assert.deepEqual({ ...body, asOf: null }, { asOf: null, total: 0, records: [], nextCursor: null });
+    assert.equal((await mf.dispatchFetch("https://api.example.test/api/health")).status, 200);
+  } finally { await mf.dispose(); }
+});
 test("staging assets are uncacheable and unindexed while all API paths remain in the booking worker", { timeout: 120000 }, async () => {
   const script = buildSync({ entryPoints: [path.join(__dirname, "worker.mjs")], bundle: true, write: false, format: "esm", platform: "browser", external: ["cloudflare:workers"] }).outputFiles[0].text;
   const options = convertV4MiniflareOptions({ modules: true, script, compatibilityDate: "2026-09-27",

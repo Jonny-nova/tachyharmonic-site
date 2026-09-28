@@ -35,6 +35,52 @@ class BookingService {
     catch { throw fail("trader_address_required", 503); }
   }
   record(id) { return this.store.read().bookings.find(x => x.id === id); }
+  async retentionInventory({ limit, cursor } = {}) {
+    const pageSize = limit === undefined ? 50 : Number(limit);
+    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) throw fail("invalid_inventory_limit");
+    let previous = null;
+    if (cursor !== undefined) {
+      if (typeof cursor !== "string" || cursor.length > 256 || !/^[A-Za-z0-9_-]+$/.test(cursor)) throw fail("invalid_inventory_cursor");
+      try {
+        previous = JSON.parse(atob(cursor.replace(/-/g, "+").replace(/_/g, "/")));
+        if (previous.v !== 1 || !/^[0-9a-f]{64}$/.test(previous.snapshot) ||
+          !Number.isSafeInteger(previous.offset) || previous.offset < 1 || !Number.isFinite(Date.parse(previous.asOf))) throw new Error();
+      } catch { throw fail("invalid_inventory_cursor"); }
+    }
+    const asOf = previous?.asOf || this.now(), now = Date.parse(asOf), state = this.store.read();
+    const unfinishedById = new Map();
+    for (const job of Object.values(state.jobs)) if (job.status !== "done") unfinishedById.set(job.id, (unfinishedById.get(job.id) || 0) + 1);
+    const records = state.bookings.map(record => {
+      const secret = state.private[record.id], offer = offerForRate(record.rate);
+      const noteDeadline = secret?.noteDeleteAt || null;
+      const notePresent = !!secret?.note;
+      const noteStatus = !secret ? "unknown" : !notePresent ? "absent" : noteDeadline && Date.parse(noteDeadline) <= now || record.status === "booking_failed" ? "due_uncleared" : "present_not_due";
+      const pendingJobs = unfinishedById.get(record.id) || 0;
+      const paymentState = record.paymentId ? "paid" : record.checkoutAttemptedAt && !record.checkoutTerminal ? "checkout_unresolved" : record.checkoutTerminal ? "unpaid_terminal" : "not_started";
+      const refundState = ["none", "pending", "initiated", "attention_required"].includes(record.refundStatus) ? record.refundStatus : "none";
+      const recoveryState = !secret || record.status === "confirmed" && !record.paymentId || record.externalChangePending || record.alertPending || refundState === "attention_required" || record.status === "review_requested" ? "attention_required" :
+        pendingJobs || record.retryPending || ["paid_pending", "confirming", "cancellation_pending"].includes(record.status) || paymentState === "checkout_unresolved" || refundState === "pending" || refundState === "initiated" && !record.refundSettled || record.status === "held" && Date.parse(record.expiresAt) <= now ? "unresolved" : "none";
+      const settled = (record.status === "confirmed" && Date.parse(record.startsAt) + offer.durationMinutes * 60000 <= now ||
+        record.status === "canceled" && (!record.paymentId || record.refundSettled) ||
+        record.status === "booking_failed" && (paymentState === "unpaid_terminal" || paymentState === "not_started" && !record.checkoutAttemptedAt || record.refundSettled)) && recoveryState === "none";
+      // V1 has no per-record retention decision in the ledger. The dated operator
+      // log may hold a decision, but this endpoint cannot silently infer one.
+      const retentionReasonRecorded = false, nextReviewDate = null;
+      const reviewStatus = noteStatus === "due_uncleared" ? "note_clearance_due" : recoveryState !== "none" ? "unresolved_recovery_payment_refund" :
+        settled ? "needs_jonathan_judgement" : "delivery_open";
+      return { id: record.id, bookingState: record.status, startsAt: record.startsAt, durationMinutes: offer.durationMinutes,
+        hourlyUnits: offer.hours, noteDeadline, noteStatus, paymentState, refundState, refundSettled: !!record.refundSettled,
+        recoveryState, pendingJobs, settled, retentionReasonRecorded, nextReviewDate, reviewStatus };
+    }).sort((a, b) => a.id.localeCompare(b.id));
+    if (new Set(records.map(record => record.id)).size !== records.length) throw fail("inventory_duplicate_reference", 503);
+    const snapshot = await hash(JSON.stringify(records));
+    if (previous && previous.snapshot !== snapshot) throw fail("inventory_changed_restart", 409);
+    const start = previous?.offset || 0;
+    if (start > records.length) throw fail("inventory_changed_restart", 409);
+    const page = records.slice(start, start + pageSize);
+    const nextCursor = start + pageSize < records.length ? btoa(JSON.stringify({ v: 1, snapshot, offset: start + pageSize, asOf })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") : null;
+    return { asOf, total: records.length, records: page, nextCursor };
+  }
   recoverySummary(id) {
     const instant = value => Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
     const now = Date.parse(this.now());
