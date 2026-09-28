@@ -1,5 +1,9 @@
 # Website project memory
 
+## GO LIVE authorization — 28 September 2026
+
+Jonathan explicitly accepted the final terms and the monthly operating responsibility in [booking data retention](BOOKING-DATA-RETENTION.md), and authorized PR #10 merge, publication to `tachyharmonic.ai`, production booking/live Stripe/webhook enablement and public smoke testing. A second real card charge is excluded unless genuinely needed to diagnose a public-route fault. This decision supersedes prior no-merge/no-publication gates; it does not itself prove that publication succeeded. The launch record must distinguish deployed state and public smoke evidence from this authorization.
+
 ## Controlled live validation — 28 September 2026
 
 Jonathan separately authorized and personally completed one real £30 Checkout. A temporary private token gate kept the production API inaccessible to public callers during the test. Live Stripe delivered signed Checkout and refund events with HTTP 200; the production booking confirmed with one matching Calendar event and Google Meet link, and Resend marked its actual confirmation Delivered. Controlled cancellation removed the event, released the slot, sent delivered cancellation/refund notices, and created one £30 refund that Stripe reported **succeeded**. No pending recovery jobs, duplicate correlated event or second charge/refund attempt remained. Bank posting can take additional days; the public frontend was not exercised or published.

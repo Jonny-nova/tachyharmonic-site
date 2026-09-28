@@ -20,7 +20,7 @@ From this repository, run:
 
 Open http://localhost:8000.
 
-The default public configuration keeps booking disabled. Staging has completed sandbox acceptance and a controlled private production payment/refund test has passed; public booking still awaits Jonathan's GO LIVE decision. See [current project memory](docs/PROJECT_MEMORY.md) for deployment and test status.
+The public configuration points to the production booking Worker after Jonathan's GO LIVE decision. See [current project memory](docs/PROJECT_MEMORY.md) for deployment and test status.
 
 ## Check
 
@@ -33,7 +33,7 @@ Checks cover internal anchors/resources/CNAME, booking economics and availabilit
 
 The authoritative booking rules are in [docs/BOOKING_SYSTEM_SPEC.md](docs/BOOKING_SYSTEM_SPEC.md). The pricing section explains how supported places grow. The booking calculation and transactional gate contract live in [booking](booking); their architecture and outstanding integration decisions are recorded in [BOOKING_IMPLEMENTATION.md](BOOKING_IMPLEMENTATION.md).
 
-The server uses a Cloudflare Worker and SQLite Durable Object, Stripe Checkout, Google Calendar + Meet, and Resend. Staging booking is enabled for sandbox validation; production booking remains disabled after the private live test. Jonny approved direct Google scheduling after Calendly could not meet the no-bypass rule. No service credential belongs in GitHub Pages JavaScript. Deployment and operation are described in [backend setup](backend/README.md).
+The server uses a Cloudflare Worker and SQLite Durable Object, Stripe Checkout, Google Calendar + Meet, and Resend. Staging remains separate for sandbox validation; production configuration enables public booking. Jonny approved direct Google scheduling after Calendly could not meet the no-bypass rule. No service credential belongs in GitHub Pages JavaScript. Deployment and operation are described in [backend setup](backend/README.md).
 
 `node scripts/build-staging.js` assembles an explicit allowlist of public assets in ignored `.local/staging-assets`, with a staging banner and noindex. `npm run build:backend` builds that default-disabled preview and performs a deployment dry run. It does not publish. The production CNAME and private source/credentials are excluded from the staging assets.
 
@@ -41,7 +41,7 @@ The server uses a Cloudflare Worker and SQLite Durable Object, Stripe Checkout, 
 
 The repository remains a static GitHub Pages site. The root CNAME contains tachyharmonic.ai and must remain at the root. A local rebuild or pull request does not publish the new site.
 
-The booking, payment and meeting integration has passed staging and one controlled private live validation. Publication still requires Jonathan's final decision on public terms, retention operation and GO LIVE.
+The booking, payment and meeting integration has passed staging and one controlled private live validation. Jonathan accepted the public terms, monthly retention responsibility and GO LIVE on 28 September 2026. The public rollout and smoke results are recorded separately in [project memory](docs/PROJECT_MEMORY.md).
 
 ## Working on changes
 

@@ -364,11 +364,11 @@
           </details>
           <details>
             <summary>How will a paid booking work?</summary>
-            <p>When booking opens, you will choose one or two hours, a rate and an available time, then pay. A payment alone will not mean the appointment is confirmed. You will see a clear confirmation once the appointment is secured, or a clear failure and refund status if it cannot be secured.</p>
+            <p>Choose one or two hours, a rate and an available time, then pay. A payment alone does not mean the appointment is confirmed. You will see a clear confirmation once the appointment is secured, or a clear failure and refund status if it cannot be secured.</p>
           </details>
           <details>
             <summary>What if I need to cancel or move an appointment?</summary>
-            <p>When booking opens, you can cancel the whole appointment online at least 24 hours ahead for a full refund under my policy, subject to your statutory rights. Under 24 hours, please contact me for a personal review; statutory rights still apply. To reschedule, contact me and I will check another time.</p>
+            <p>You can cancel the whole appointment online at least 24 hours ahead for a full refund under my policy, subject to your statutory rights. Under 24 hours, please contact me for a personal review; statutory rights still apply. To reschedule, contact me and I will check another time.</p>
           </details>
         </div>
       </div>
@@ -392,8 +392,8 @@
           <button type="button" id="retry-booking-terms" hidden>Retry loading terms</button>
         </div>
         <form class="intake-form" id="intake-preview" aria-describedby="intake-preview-status">
-          <p class="eyebrow" id="booking-label">Session intake / preview</p>
-          <p class="preview-notice" id="intake-preview-status">This form is a preview. It does not send or save your answers, book a session or take payment.</p>
+          <p class="eyebrow" id="booking-label">Book a session</p>
+          <p class="preview-notice" id="intake-preview-status">Loading booking…</p>
           <noscript><p>Online booking needs JavaScript. You can email Jonathan using the enquiry link.</p></noscript>
 
           <fieldset class="form-group">
@@ -403,7 +403,7 @@
             <label class="form-choice"><input type="radio" name="rate" value="70"> One hour · solidarity · £70</label>
             <label class="form-choice"><input type="radio" name="rate" value="100"> Two hours · standard · £100</label>
             <label class="form-choice"><input type="radio" name="rate" value="140"> Two hours · solidarity · £140</label>
-            <p class="form-note" id="rate-note">The £30 supported rate is for one-hour appointments only. This preview does not check live availability.</p>
+            <p class="form-note" id="rate-note">The £30 supported rate is for one-hour appointments only. Availability depends on the time and weekly capacity remaining.</p>
           </fieldset>
 
           <fieldset class="form-group" id="booking-times" disabled>
@@ -417,7 +417,7 @@
               <button type="button" id="next-week" disabled>Later week</button>
             </div>
             <p id="booking-range" class="form-note"></p>
-            <p id="slot-status" role="status" aria-live="polite">Choose a rate. Live availability is not connected yet.</p>
+            <p id="slot-status" role="status" aria-live="polite">Choose a rate, then find available times.</p>
             <div id="booking-slots" class="booking-slots"></div>
           </fieldset>
 
@@ -436,12 +436,12 @@
               <p id="intake-helper">A few paragraphs is plenty. This isn’t homework.</p>
               <output id="character-count" for="intake-note">0 / 1200</output>
             </div>
-            <p class="form-privacy" id="intake-privacy">Avoid sensitive information. When booking is enabled, your optional note is sent to Jonathan for preparation and held by the booking service. It is not sent to AI, Stripe, Google Calendar or Google Meet.</p>
+            <p class="form-privacy" id="intake-privacy">Avoid sensitive information. Your optional note is sent to Jonathan for preparation and held by the booking service. It is not sent to AI, Stripe, Google Calendar or Google Meet.</p>
           </div>
 
           <fieldset class="form-group" id="booking-consent">
             <legend>Before continuing</legend>
-            <p class="form-note">When booking is enabled, your name, email and appointment details are shared with the booking, payment, scheduling and email services to arrange your session. No AI processing or meeting recording is requested by this form. Read the <a href="terms.html#privacy">privacy notice</a>.</p>
+            <p class="form-note">Your name, email and appointment details are shared with the booking, payment, scheduling and email services to arrange your session. No AI processing or meeting recording is requested by this form. Read the <a href="terms.html#privacy">privacy notice</a>.</p>
             <label class="form-choice"><input type="checkbox" id="booking-terms" required> <span>I have read and agree to the <a href="terms.html#current-booking-terms">booking and cancellation terms</a>.</span></label>
             <div id="early-start-group" hidden>
               <label class="form-choice"><input type="checkbox" id="early-start"> <span id="early-start-wording">I expressly request preparation and my session to begin within my 14-day cancellation period. I understand that, if I cancel after work begins, a proportionate amount for work actually supplied may be payable where the law permits, and that my statutory cancellation right ends once the service is fully performed.</span></label>
@@ -451,7 +451,7 @@
           </fieldset>
 
           <p id="booking-error" class="booking-error" role="alert" tabindex="-1" hidden></p>
-          <button class="button button-primary" id="booking-submit" type="submit" disabled>Booking is not connected yet</button>
+          <button class="button button-primary" id="booking-submit" type="submit" disabled>Choose a time to continue</button>
           <p class="form-note" id="payment-explanation" hidden>You will continue to Stripe to pay the selected price. Payment alone does not confirm an appointment.</p>
         </form>
         <section class="intake-form booking-management" id="booking-management" aria-labelledby="booking-status-title" hidden>

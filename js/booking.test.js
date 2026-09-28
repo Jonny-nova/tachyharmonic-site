@@ -155,12 +155,13 @@ test("cancellation and refund states never falsely report completed actions", ()
   assert.equal(errorMessage(new Error("Server said token=secret")).includes("secret"), false);
 });
 
-test("static candidate remains disabled and does not collect AI preferences", () => {
+test("public booking uses the production API and does not collect AI preferences", () => {
   const base = path.join(__dirname, "..");
   const html = fs.readFileSync(path.join(base, "index.html"), "utf8");
   const config = fs.readFileSync(path.join(__dirname, "booking-config.js"), "utf8");
-  assert.match(config, /enabled:\s*false/); assert.match(config, /apiBase:\s*""/);
-  assert.match(html, /This form is a preview\. It does not send or save your answers/);
+  assert.match(config, /enabled:\s*true/);
+  assert.match(config, /apiBase:\s*"https:\/\/tachyharmonic-booking-production\.tachyharmonic-site\.workers\.dev"/);
+  assert.doesNotMatch(html, /This form is a preview\. It does not send or save your answers/);
   assert.doesNotMatch(html, /name="summary-interest"/);
   assert.match(html, /id="booking-submit"[^>]+disabled/);
   assert.match(html, /maxlength="1200"/); assert.match(html, /terms\.html#privacy/);

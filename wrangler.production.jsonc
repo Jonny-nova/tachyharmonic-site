@@ -8,8 +8,8 @@
   "durable_objects": { "bindings": [{ "name": "BOOKING_OFFICE", "class_name": "BookingOffice" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["BookingOffice"] }],
   "vars": {
-    "BOOKING_ENABLED": "false",
-    "ALLOW_LIVE_PAYMENTS": "false",
+    "BOOKING_ENABLED": "true",
+    "ALLOW_LIVE_PAYMENTS": "true",
     "STRIPE_MODE": "live",
     "SCHEDULER_PROVIDER": "google",
     "CALENDAR_SOURCE": "google",

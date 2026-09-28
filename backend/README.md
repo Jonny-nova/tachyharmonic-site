@@ -19,7 +19,7 @@ npm run dev:backend
 
 `wrangler.jsonc` binds `BOOKING_OFFICE` to `BookingOffice`. Migration `v1` creates its SQLite class using `new_sqlite_classes`. The named object `tachyharmonic-all-weeks-v1` is the single ledger for this environment. Changing the name creates a different ledger; later class/schema changes need explicit migrations. Do not delete a namespace to clear a test if it could contain real records. Use separate staging/production resources and credentials when adding production.
 
-Both `BOOKING_ENABLED` and the frontend `js/booking-config.js` switch default to false. Publishing a Worker or passing its health check does not enable the public form. Actual deployment and public go-live remain separately recorded coordinator decisions.
+Both `BOOKING_ENABLED` and the frontend `js/booking-config.js` switch are enabled for the authorized production launch. A Worker health check alone does not prove the public form; actual deployment and public smoke results are recorded separately in project memory.
 
 ## Configuration
 
