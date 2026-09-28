@@ -62,7 +62,9 @@ function createAdapters(env, options = {}) {
   const now = options.now || Date.now;
   async function request(provider, url, init = {}) {
     let response;
-    try { response = await fetcher(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(15000) }); }
+    // workerd rejects redirect:'error'. Manual plus the non-2xx check below
+    // preserves fail-closed redirects without forwarding provider credentials.
+    try { response = await fetcher(url, { ...init, redirect: 'manual', signal: AbortSignal.timeout(15000) }); }
     catch { throw new ProviderError(provider, 'response_unknown'); }
     if (!response.ok) {
       // Timeouts, conflicts, rate limits and 5xx may follow a successful write.
@@ -103,7 +105,7 @@ function createAdapters(env, options = {}) {
       const success = new URL(required(successUrl || env.CHECKOUT_SUCCESS_URL, 'missing_success_url'));
       const cancel = new URL(required(cancelUrl || env.CHECKOUT_CANCEL_URL, 'missing_cancel_url'));
       if (success.protocol !== 'https:' || cancel.protocol !== 'https:') throw new ProviderError('configuration', 'https_required', true);
-      success.hash = new URLSearchParams({ booking: bookingId }).toString();
+      success.hash = new URLSearchParams({ booking: bookingId, checkout: 'returned' }).toString();
       cancel.hash = new URLSearchParams({ booking: bookingId }).toString();
       const integration = required(env.STRIPE_INTEGRATION_IDENTIFIER, 'missing_integration_identifier');
       if (!/-[a-z]{8}$/.test(integration)) throw new ProviderError('configuration', 'invalid_integration_identifier', true);
@@ -151,18 +153,33 @@ function createAdapters(env, options = {}) {
       if (!/^pi_[A-Za-z0-9]+$/.test(paymentId || '')) throw new ProviderError('input', 'invalid_payment_identity', true);
       amountCheck(amount);
       const result = await stripe('/refunds', { payment_intent: paymentId, amount, ...(bookingId ? { 'metadata[booking_id]': identity(bookingId) } : {}) }, idempotencyKey);
-      if (!/^re_[A-Za-z0-9]+$/.test(result.id || '') || !['pending', 'succeeded', 'requires_action'].includes(result.status) || result.amount !== amount || result.payment_intent !== paymentId) throw new ProviderError('stripe', 'refund_not_accepted');
+      if (!/^re_[A-Za-z0-9]+$/.test(result.id || '') || !['pending', 'succeeded', 'requires_action', 'failed', 'canceled'].includes(result.status) || result.amount !== amount || result.payment_intent !== paymentId) throw new ProviderError('stripe', 'refund_not_accepted');
       return { refundId: result.id, status: result.status };
     },
-    async getRefund({ paymentId, bookingId, amount }) {
+    async getRefund({ paymentId, bookingId, amount, refundId, excludeRefundIds = [] }) {
       try {
         if (!/^pi_[A-Za-z0-9]+$/.test(paymentId || '')) return { state: 'unknown' };
         identity(bookingId);
-        const response = await stripe(`/refunds?${form({ payment_intent: paymentId, limit: 100 })}`);
+        if (refundId && !/^re_[A-Za-z0-9]+$/.test(refundId)) return { state: 'unknown' };
+        const response = refundId ? { data: [await stripe(`/refunds/${refundId}`)], has_more: false } : await stripe(`/refunds?${form({ payment_intent: paymentId, limit: 100 })}`);
         if (!Array.isArray(response.data) || response.has_more) return { state: 'unknown' };
-        const matches = response.data.filter(x => /^re_[A-Za-z0-9]+$/.test(x.id || '') && x.payment_intent === paymentId && x.metadata?.booking_id === bookingId && AMOUNTS.has(x.amount) && (amount === undefined || x.amount === amount) && ['pending', 'succeeded', 'failed', 'canceled', 'requires_action'].includes(x.status));
+        const matches = response.data.filter(x => (!refundId || x.id === refundId) && !excludeRefundIds.includes(x.id) && /^re_[A-Za-z0-9]+$/.test(x.id || '') && x.payment_intent === paymentId && x.metadata?.booking_id === bookingId && AMOUNTS.has(x.amount) && (amount === undefined || x.amount === amount) && ['pending', 'succeeded', 'failed', 'canceled', 'requires_action'].includes(x.status));
         return matches.length === 1 ? { state: 'found', refundId: matches[0].id, status: matches[0].status, amount: matches[0].amount } : { state: 'unknown' };
       } catch { return { state: 'unknown' }; }
+    },
+    async refundRetryEligibility({ paymentId, bookingId, amount, refundId }) {
+      try {
+        if (!/^pi_[A-Za-z0-9]+$/.test(paymentId || '') || !/^re_[A-Za-z0-9]+$/.test(refundId || '')) return { eligible: false };
+        identity(bookingId); amountCheck(amount);
+        const response = await stripe(`/refunds?${form({ payment_intent: paymentId, limit: 100 })}`);
+        if (!Array.isArray(response.data) || response.has_more !== false) return { eligible: false };
+        const previous = response.data.find(x => x.id === refundId);
+        if (!previous || previous.payment_intent !== paymentId || previous.metadata?.booking_id !== bookingId || previous.amount !== amount || !['failed', 'canceled'].includes(previous.status)) return { eligible: false };
+        // Include manual/unrelated-metadata refunds: any unresolved or paid-out
+        // refund on this payment prevents another full-amount attempt.
+        if (response.data.some(x => !/^re_[A-Za-z0-9]+$/.test(x.id || '') || x.payment_intent !== paymentId || !['failed', 'canceled'].includes(x.status))) return { eligible: false };
+        return { eligible: true, previousStatus: previous.status };
+      } catch { return { eligible: false }; }
     },
     async verifyWebhook(rawBody, signature) {
       const event = await verifySignedBody(rawBody, signature, env.STRIPE_WEBHOOK_SECRET, now(), 300);

@@ -1,6 +1,6 @@
 # Booking backend setup and operation
 
-Updated 27 September 2026. This guide describes the checked-in candidate, not a completed real-provider acceptance test. Live/deployment evidence belongs in [project memory](../docs/PROJECT_MEMORY.md). Read the [implementation boundary](../BOOKING_IMPLEMENTATION.md) and [booking economics](../docs/BOOKING_SYSTEM_SPEC.md) first.
+Updated 28 September 2026. This guide describes the candidate and its operator controls; current provider acceptance and deployment evidence belong in [project memory](../docs/PROJECT_MEMORY.md) and the [continuation evidence](../docs/V1-CANDIDATE-2026-09-27.md). Read the [implementation boundary](../BOOKING_IMPLEMENTATION.md) and [booking economics](../docs/BOOKING_SYSTEM_SPEC.md) first.
 
 The selected scheduler is **Google Calendar + Google Meet**, following Jonny's explicit approval in this integration task. Stripe handles payment/refunds; Resend is the implemented transactional-email adapter. Cloudflare Worker + one SQLite Durable Object provide private storage and serialized capacity decisions. No AI preparation service is connected.
 
@@ -84,7 +84,7 @@ Responses are JSON with `Cache-Control: no-store`. Dates are ISO instants with t
 | `GET /api/bookings/:id` | Visitor bearer capability | Sanitized state/offer/time/expiry/refund/external-change flag, plus confirmed Meet link. No contact/note/token. |
 | `POST /api/bookings/:id/cancel` | Visitor bearer capability | `202` pending/review state; HTTP acceptance is not cancellation/refund proof. |
 | `POST /api/webhooks/stripe` | Raw body and verified `Stripe-Signature` | Deduplicated payment transition or refund reconciliation. |
-| `GET /api/admin/bookings/:id` | Administrator bearer credential | Private contact, eligible note, choice/contract record and resolution history; audited read. |
+| `GET /api/admin/bookings/:id` | Administrator bearer credential | Private contact, eligible note, choice/contract record, resolution history and sanitized recovery-job summary; audited read. |
 | `POST /api/admin/bookings/:id/resolve` | Administrator; action/reason below | Canonical provider check and audited human decision. |
 
 Hold body:
@@ -121,7 +121,21 @@ For `confirmed`/`review_requested` records, send `{action,reasonCode}` to the re
 
 Use a non-sensitive reason such as `statutory_cancellation_approved`; only lowercase letters, digits and underscores, 3–80 characters, are accepted. Action/reason/time/provider status are retained. A moved appointment or unknown state is rejected for investigation. There is no generic move, partial-double cancellation, arbitrary refund amount or self-service reschedule endpoint.
 
-Reread after resolution. `initiated` confirms Stripe acceptance only. `attention_required`, external changes or prolonged paid `confirming` state need investigation. Never edit stored status to make uncertainty look complete. Restoring provider access permits reconciliation; permanently ambiguous creation or an operation past its safe idempotency window requires deliberate provider/operator handling and an incident record. The resolve endpoint is not a general repair tool for every provider state.
+For a **known terminal failed refund**, the same authenticated resolve route accepts:
+
+```json
+{"action":"retry_refund","reasonCode":"verified_failure_retry"}
+```
+
+This is available only for a `booking_failed` or `canceled` booking with `refundStatus: attention_required`, a known payment and a known current refund. The backend independently reads Stripe's complete refund list for that payment. The old refund must match the booking and full amount and be `failed` or `canceled`; any other pending, successful, action-required or unknown refund prevents another full-amount attempt. Incomplete or failed provider reads also reject the action. Stripe's refundable-amount limit remains the final guard against an external refund racing this check.
+
+The decision and reason are audited before a replacement is queued. Earlier refund IDs, verified status, time and generation remain in durable `refundHistory`; the private resolution history records the previous ID. Each explicitly approved replacement receives a new durable generation and stable idempotency key. Uncertain retries of that attempt reuse the same key. Repeating the admin action while the replacement is pending is rejected. Canonical monitoring targets the current refund ID; lost-response recovery excludes the retained earlier attempts. No arbitrary refund amount or automatic sequence of replacement generations is exposed.
+
+A known refund response of `requires_action`, `failed` or `canceled` immediately becomes `attention_required`, without an initiation claim. A definitive Stripe request rejection with HTTP 400 or 422 also becomes durable `attention_required` with the safe reason `provider_refund_rejected`. That job stops retrying; its generation, history and audit are preserved, pending/operator notices are queued, and no refund ID is invented. Network, timeout and server failures remain retryable uncertainty. A rejection without a new refund ID cannot use `retry_refund` to manufacture another generation: investigate with the payment provider and arrange any necessary customer resolution separately. A scripted failing sandbox card can reject a replacement too; record that definite test outcome rather than claiming a successful refund.
+
+The admin read returns `recovery.pendingJobs`, containing only each unfinished job's `kind`, `status`, `attempts`, `due`, `firstAttemptAt` and `pastAutomaticIdempotencyWindow`. It excludes message snapshots, capabilities and provider payloads. A future `due` value can explain why an otherwise recovered booking still displays `retryPending`. That flag is recalculated across all attempted unfinished jobs, including email, after job completion and during repair. It clears after the final recovery, while human review, external changes, failed bookings and refund attention retain their separate operational meaning. `pendingJobs: []` does not prove that an attention-required financial issue has been resolved.
+
+Reread after resolution. `initiated` confirms Stripe acceptance only. A later correlated signed refund event triggers a fresh canonical read even after an earlier successful result; if that read fails, normal alarms keep checking. `attention_required`, external changes or prolonged paid `confirming` state need investigation. Never edit stored status, fabricate a provider ID or mark manual payment/refund completion to make uncertainty look complete. Restoring provider access permits reconciliation where the canonical operation can be identified; permanently ambiguous creation or an operation past its safe idempotency window requires deliberate provider/operator handling and an incident record. The resolve endpoint is not a general repair tool for every provider state.
 
 ## Retry, storage and retention
 
@@ -132,6 +146,7 @@ The ledger is one SQL state document plus an append-only safe-action audit table
 - Lost Checkout identities are searched in a bounded range by exact opaque correlation. Unknown event creation retains capacity. Failed Meet creation is compensated by canceling the event before refunding.
 - Stable keys protect refunds/email. Beyond 23 hours, uncertain refunds are reconciled instead of resubmitted; uncertain mail waits for manual handling. Immutable snapshots and state checks suppress stale success/pending messages.
 - Failure-episode keys allow a later refund/cancellation failure to alert again. Sender failures remain queued; verify independent operator monitoring before launch.
+- The administrator-only Google verification probe additionally requires the exact staging hostname, test mode and explicit `STAGING_PROVIDER_CHECKS=true`; leave it disabled during ordinary operation. Temporary fault-injection wrappers used for acceptance are ignored local tooling, not the normal candidate entry point. Restore the ordinary Worker after a controlled test.
 - Failed/expired hold notes clear in cleanup. Confirmed notes clear 30 days after appointment start, with cleanup before private reads. This does not prove deletion from backups. Contact/financial/audit/backup retention remain policy-review items.
 
 Raw management capabilities and signing secrets are absent from the SQL ledger/outbox. Email capabilities are derived at send time. Routine audit actions contain safe action names and opaque references, not intake text or provider-response bodies.

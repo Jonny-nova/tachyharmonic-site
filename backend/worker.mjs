@@ -3,6 +3,7 @@ import storeModule from "./store.js";
 import serviceModule from "./service.js";
 import providerModule from "./providers.js";
 import consentModule from "../booking/consent.js";
+import stagingProbeModule from "./staging-google-probe.js";
 const { SqliteStore } = storeModule;
 const { BookingService, hash, fail } = serviceModule;
 const { createAdapters } = providerModule;
@@ -52,6 +53,13 @@ export class BookingOffice extends DurableObject {
         const token = request.headers.get("Authorization")?.match(/^Bearer (.+)$/)?.[1];
         if (request.method === "GET" && url.pathname === "/api/health") return reply({ status: "ok", bookingEnabled: this.service.enabled }, 200, cors);
         if (request.method === "GET" && url.pathname === "/api/terms") return reply({ ...this.service.contractTerms(), traderAddress: this.env.TRADER_ADDRESS.trim() }, 200, cors);
+        if (request.method === "POST" && url.pathname === "/api/admin/staging/google-probe") {
+          if (!this.env.ADMIN_TOKEN || !token || await hash(token) !== await hash(this.env.ADMIN_TOKEN)) throw fail("unauthorized", 401);
+          if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("Content-Type") || "")) throw fail("json_required", 415);
+          const probe = stagingProbeModule.validateProbe(this.env, request.url, JSON.parse(await limitedBody(request)));
+          const evidence = await stagingProbeModule.runProbe(this.service.adapters, probe);
+          return reply(evidence, evidence.passed ? 200 : 503, cors);
+        }
         if (request.method === "GET" && url.pathname === "/api/availability") return reply(await this.service.availability({ startsAt: url.searchParams.get("startsAt"), from: url.searchParams.get("from"), to: url.searchParams.get("to"), rate: Number(url.searchParams.get("rate")) }), 200, cors);
         const admin = url.pathname.match(/^\/api\/admin\/bookings\/([0-9a-f-]{36})(?:\/(resolve))?$/);
         if (admin) {
@@ -66,7 +74,7 @@ export class BookingOffice extends DurableObject {
           const record = state.bookings.find(x => x.id === admin[1]);
           if (!record) throw fail("not_found", 404);
           this.store.audit(record.id, "private_record_read", new Date().toISOString());
-          return reply({ ...this.service.publicRecord(record), intake: state.private[record.id] && {
+          return reply({ ...this.service.publicRecord(record), recovery: this.service.recoverySummary(record.id), intake: state.private[record.id] && {
             name: state.private[record.id].name, email: state.private[record.id].email,
             note: record.status === "confirmed" && (state.private[record.id].consent.earlyStart || Date.now() >= Date.parse(consentModule.cancellationEndsAt(state.private[record.id].contractAt))) ? state.private[record.id].note : null,
             consent: state.private[record.id].consent, contractAt: state.private[record.id].contractAt, resolutions: state.private[record.id].resolutions || [],
@@ -86,7 +94,7 @@ export class BookingOffice extends DurableObject {
           if (url.pathname.endsWith("stripe")) {
             const event = await this.service.adapters.payments.verifyWebhook(raw, request.headers.get("Stripe-Signature"));
             if (event.kind === "payment_completed") this.service.payment(event);
-            else if (event.kind === "refund_updated") await this.service.reconcile();
+            else if (event.kind === "refund_updated") await this.service.reconcile(event);
           } else {
             const event = await this.service.adapters.scheduler.verifyWebhook(raw, request.headers.get("Calendly-Webhook-Signature"));
             // Never trust webhook ordering or cancellation state: fetch the

@@ -23,6 +23,8 @@ for (const amount of [3000, 5000, 7000, 10000, 14000]) test(`Checkout uses serve
   const body = request.init.body;
   assert.equal(body.get('line_items[0][price_data][unit_amount]'), String(amount));
   assert.equal(body.get('metadata[booking_id]'), 'abc');
+  assert.equal(new URL(body.get('success_url')).hash, '#booking=abc&checkout=returned');
+  assert.equal(new URL(body.get('cancel_url')).hash, '#booking=abc');
   assert.equal(body.get('payment_method_types'), null);
   assert.equal(body.get('expires_at'), String(NOW / 1000 + 1860));
   assert.equal(request.init.headers['Idempotency-Key'], 'checkout-abc');
@@ -85,9 +87,30 @@ test('refund initiation requires accepted correlated provider response, reconcil
   const args = { paymentId: 'pi_abc', bookingId: 'abc', amount: 5000, idempotencyKey: 'refund-abc' };
   const result = await adapters(async () => reply({ id: 're_abc', payment_intent: 'pi_abc', amount: 5000, status: 'pending' })).payments.refund(args);
   assert.equal(result.refundId, 're_abc');
-  await assert.rejects(adapters(async () => reply({ id: 're_abc', payment_intent: 'pi_abc', amount: 5000, status: 'failed' })).payments.refund(args), /refund_not_accepted/);
+  assert.equal((await adapters(async () => reply({ id: 're_abc', payment_intent: 'pi_abc', amount: 5000, status: 'failed' })).payments.refund(args)).status, 'failed');
   assert.deepEqual(await adapters(async () => reply({ data: [], has_more: false })).payments.getRefund(args), { state: 'unknown' });
   assert.deepEqual(await adapters(async () => reply({ data: [{ id: 're_abc', payment_intent: 'pi_abc', metadata: { booking_id: 'abc' }, status: 'pending', amount: 5000 }] })).payments.getRefund(args), { state: 'found', refundId: 're_abc', status: 'pending', amount: 5000 });
+});
+
+test('refund replacement requires complete canonical terminal failures and rejects any active refund', async () => {
+  const args = { paymentId: 'pi_abc', bookingId: 'abc', amount: 5000, refundId: 're_old' };
+  const old = { id: 're_old', payment_intent: 'pi_abc', metadata: { booking_id: 'abc' }, amount: 5000, status: 'failed' };
+  assert.deepEqual(await adapters(async () => reply({ data: [old], has_more: false })).payments.refundRetryEligibility(args), { eligible: true, previousStatus: 'failed' });
+  for (const other of ['pending', 'succeeded', 'requires_action', 'unknown']) {
+    const result = await adapters(async () => reply({ data: [old, { ...old, id: 're_manual', metadata: {}, status: other }], has_more: false })).payments.refundRetryEligibility(args);
+    assert.deepEqual(result, { eligible: false });
+  }
+  for (const response of [{ data: [old], has_more: true }, { data: [old] }, { data: [{ ...old, status: 'pending' }], has_more: false }, { data: [{ ...old, amount: 3000 }], has_more: false }]) assert.deepEqual(await adapters(async () => reply(response)).payments.refundRetryEligibility(args), { eligible: false });
+});
+
+test('canonical refund identity selects replacement while lost-response search excludes only retained old attempts', async () => {
+  const old = { id: 're_old', payment_intent: 'pi_abc', metadata: { booking_id: 'abc' }, amount: 5000, status: 'failed' };
+  const current = { ...old, id: 're_new', status: 'succeeded' };
+  const args = { paymentId: 'pi_abc', bookingId: 'abc', amount: 5000 };
+  const api = adapters(async url => new URL(url).pathname === '/v1/refunds/re_new' ? reply(current) : reply({ data: [old, current], has_more: false })).payments;
+  assert.equal((await api.getRefund({ ...args, refundId: 're_new' })).refundId, 're_new');
+  assert.deepEqual(await api.getRefund(args), { state: 'unknown' });
+  assert.equal((await api.getRefund({ ...args, excludeRefundIds: ['re_old'] })).refundId, 're_new');
 });
 test('Calendly booking sends minimum invitee fields and opaque tracking, omits note/native links', async () => {
   let body;

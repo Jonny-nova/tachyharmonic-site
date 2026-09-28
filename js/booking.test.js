@@ -135,6 +135,11 @@ test("checkout only redirects to verified HTTPS Stripe checkout hostname", async
 
 test("cancellation and refund states never falsely report completed actions", () => {
   const state = fields => describeRecord({ ...baseRecord, ...fields }, NOW);
+  for (const status of ['held', 'paid_pending', 'confirming', 'confirmed']) {
+    assert.equal(state({ status, refundStatus: 'none' }).refund, '');
+    assert.equal(state({ status, refundStatus: undefined }).refund, '');
+  }
+  assert.match(state({ status: 'canceled', refundStatus: 'unexpected' }).refund, /status needs checking/);
   assert.match(state({ status: "cancellation_pending", providerCancelled: false, refundStatus: "pending" }).message, /has not yet been confirmed/);
   assert.match(state({ status: "cancellation_pending", providerCancelled: true, refundStatus: "pending" }).refund, /has not yet been confirmed/);
   assert.match(state({ status: "canceled", refundStatus: "initiated" }).refund, /initiation has been confirmed/);
@@ -166,7 +171,7 @@ test("static candidate remains disabled and does not collect AI preferences", ()
 
 // Minimal DOM event surface: exercise mount's actual navigation and network
 // handlers without claiming browser layout or live-provider verification.
-function mountedBooking({ stored, hash = '', handle, terms = { version: 'test-v1', text: 'Terms: TEST FIXTURE ONLY, 1 Example Street', traderAddress: 'TEST FIXTURE ONLY, 1 Example Street' } }) {
+function mountedBooking({ stored, hash = '', handle, visible = false, terms = { version: 'test-v1', text: 'Terms: TEST FIXTURE ONLY, 1 Example Street', traderAddress: 'TEST FIXTURE ONLY, 1 Example Street' } }) {
   class Element {
     constructor() { this.hidden = false; this.disabled = false; this.value = ''; this.listeners = {}; this.children = []; }
     addEventListener(type, callback) { (this.listeners[type] ||= []).push(callback); }
@@ -186,8 +191,10 @@ function mountedBooking({ stored, hash = '', handle, terms = { version: 'test-v1
   element('booking-management').hidden = true; element('booking-timezone').value = 'Europe/London';
   const storage = new Map(stored ? [['tachyharmonic-booking-v1', JSON.stringify(stored)]] : []);
   const win = new Element();
-  const doc = new Element(); doc.hidden = true; doc.getElementById = element; doc.createElement = () => new Element();
+  const doc = new Element(); doc.hidden = !visible; doc.getElementById = element; doc.createElement = () => new Element();
+  const timers = new Map(); let timerId = 0;
   Object.assign(win, { document: doc, crypto: webcrypto, btoa: encode, navigator: { clipboard: { writeText: async () => {} } },
+    setTimeout: callback => { timers.set(++timerId, callback); return timerId; }, clearTimeout: id => timers.delete(id),
     sessionStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
     location: { href: 'https://example.test/index.html' + hash, hash, assign: url => { win.redirect = url; } },
     history: { replaceState: (_state, _title, next) => { win.location.hash = next; win.location.href = 'https://example.test/index.html' + next; } },
@@ -201,10 +208,42 @@ function mountedBooking({ stored, hash = '', handle, terms = { version: 'test-v1
   });
   const calls = [];
   mount(win, { enabled: true, apiBase: 'https://api.example.test', consentVersion: 'v1-2026-09-27' });
-  return { win, element, calls, storage, async navigate(next) { win.location.hash = next; return win.fire('hashchange'); } };
+  return { win, element, calls, storage, timers, async poll() { const [id, callback] = timers.entries().next().value; timers.delete(id); await callback(); }, async navigate(next) { win.location.hash = next; return win.fire('hashchange'); } };
 }
 const settle = async () => { for (let i = 0; i < 4; i++) await new Promise(resolve => setImmediate(resolve)); };
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
+
+test('successful Checkout return stays neutral and polls delayed canonical payment without repaying', async () => {
+  let status = 'held';
+  const fixture = mountedBooking({ visible: true, stored: { id: baseRecord.id, token }, hash: '#booking=booking-1&checkout=returned',
+    handle: async () => ({ ...baseRecord, status, expiresAt: '2099-01-01T00:00:00Z' }) });
+  await settle();
+  assert.match(fixture.element('booking-status-message').textContent, /not yet been verified/);
+  assert.equal(fixture.element('resume-checkout').hidden, true);
+  await fixture.element('resume-checkout').fire('click');
+  assert.equal(fixture.calls.length, 1);
+  assert.equal(fixture.timers.size, 1);
+  status = 'confirmed'; await fixture.poll();
+  assert.equal(fixture.element('booking-status-title').textContent, 'Your appointment is confirmed');
+  assert.equal(fixture.timers.size, 0);
+  assert.ok(fixture.calls.every(call => call.request.method === 'GET'));
+});
+
+test('unverified Checkout hint stops after ten automatic checks and survives refresh without becoming payment proof', async () => {
+  const fixture = mountedBooking({ visible: true, stored: { id: baseRecord.id, token }, hash: '#booking=booking-1&checkout=returned',
+    handle: async () => ({ ...baseRecord, expiresAt: '2099-01-01T00:00:00Z' }) });
+  await settle();
+  for (let i = 0; i < 10; i++) await fixture.poll();
+  assert.equal(fixture.calls.length, 11);
+  assert.equal(fixture.timers.size, 0);
+  assert.match(fixture.element('booking-status-message').textContent, /Automatic checks have paused/);
+  const reopened = mountedBooking({ visible: true, stored: JSON.parse(fixture.storage.get('tachyharmonic-booking-v1')), hash: '#booking=booking-1',
+    handle: async () => ({ ...baseRecord, expiresAt: '2099-01-01T00:00:00Z' }) });
+  await settle();
+  assert.equal(reopened.timers.size, 0);
+  assert.equal(reopened.element('resume-checkout').hidden, true);
+  assert.match(reopened.element('booking-status-message').textContent, /not yet been verified/);
+});
 
 test('checkout remains closed when current terms cannot be disclosed', async () => {
   for (const terms of [new Error('offline'), {}, { version: 'v1', text: 'Missing business address', traderAddress: 'TEST FIXTURE ONLY, 1 Example Street' }]) {

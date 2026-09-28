@@ -155,6 +155,43 @@ test("delayed confirmation mail is suppressed after cancellation", async () => {
   f.setNow("2026-09-28T08:20:00Z"); await f.service.drain();
   assert.equal(f.calls.messages.some(x => x.kind === "booking_confirmed"), false);
 });
+
+test("notification recovery clears retry only when every attempted pending job has recovered", async () => {
+  const f = fixture(), held = await f.hold();
+  f.adapters.notifications.send = async () => { throw new Error("email_unavailable"); };
+  f.pay(held.id); await f.service.drain();
+  assert.equal(f.service.record(held.id).retryPending, true);
+  const pending = Object.values(f.store.read().jobs).filter(j => j.status !== "done" && j.attempts > 0);
+  assert.ok(pending.some(j => j.kind === "notice_confirmed"));
+  assert.ok(pending.some(j => j.kind === "notice_alert"));
+  f.adapters.notifications.send = async message => { f.calls.messages.push(message); };
+  f.setNow("2026-09-28T08:10:00Z");
+  await f.service.drain(1);
+  assert.equal(f.service.record(held.id).retryPending, true, "the second attempted notice still needs recovery");
+  await f.service.drain();
+  assert.equal(f.service.record(held.id).retryPending, false);
+  assert.equal(!!f.service.record(held.id).alertPending, false);
+  f.store.mutate(state => { const record = state.bookings.find(x => x.id === held.id); record.retryPending = true; record.alertPending = true; });
+  f.service.repairJobs();
+  assert.equal(f.service.record(held.id).retryPending, false, "old completed-notice flags repair without another provider operation");
+  assert.equal(!!f.service.record(held.id).alertPending, false);
+});
+
+test("operator recovery summary exposes only pending-job timing and state, never snapshots or capabilities", async () => {
+  const f = fixture(), held = await f.hold();
+  f.adapters.notifications.send = async () => { throw new Error("email_unavailable"); };
+  f.pay(held.id); await f.service.drain();
+  const summary = f.service.recoverySummary(held.id);
+  assert.ok(summary.pendingJobs.some(job => job.kind === "notice_confirmed" && job.attempts === 1 && job.status === "pending"));
+  assert.equal(summary.pendingJobs.some(job => job.kind === "confirm"), false);
+  for (const job of summary.pendingJobs) assert.deepEqual(Object.keys(job).sort(), ["attempts", "due", "firstAttemptAt", "kind", "pastAutomaticIdempotencyWindow", "status"]);
+  const json = JSON.stringify(summary);
+  for (const privateValue of [f.token, f.input.email, f.input.name, f.input.note, "snapshot", "manageUrl"]) assert.equal(json.includes(privateValue), false);
+  assert.ok(summary.pendingJobs.every(job => job.pastAutomaticIdempotencyWindow === false));
+  f.setNow("2026-09-29T09:00:00Z");
+  assert.ok(f.service.recoverySummary(held.id).pendingJobs.every(job => job.pastAutomaticIdempotencyWindow === true));
+  assert.deepEqual(f.service.recoverySummary("other"), { pendingJobs: [] });
+});
 test("London statutory end includes whole day14 across DST", () => {
   const { cancellationEndsAt, requiresEarlyStart } = require("../booking/consent");
   assert.equal(cancellationEndsAt("2026-09-28T08:00:00Z"), "2026-10-12T23:00:00.000Z");
@@ -210,6 +247,97 @@ test("refund later requiring action stays monitored and reports provider recover
   await f.service.reconcile(); assert.equal(f.service.record(held.id).refundStatus, "initiated");
   assert.equal(f.service.record(held.id).refundSettled, true);
   assert.equal(f.calls.messages.filter(x => x.kind === "refund_initiated").length, 2);
+});
+
+test("targeted refund webhook rechecks an earlier succeeded refund and distrusts ordering or mismatched correlation", async () => {
+  const f = fixture(), held = await f.hold(); f.pay(held.id); await f.service.drain(); await f.service.cancel(held.id, f.token); await f.service.drain();
+  let providerStatus = "succeeded", reads = 0;
+  f.adapters.payments.getRefund = async () => { reads++; return { state: "found", refundId: "re_1", status: providerStatus }; };
+  await f.service.reconcile();
+  assert.equal(f.service.record(held.id).refundSettled, true);
+  const event = { kind: "refund_updated", bookingId: held.id, paymentId: "pi_1", refundId: "re_1" };
+  providerStatus = "failed";
+  const before = reads;
+  await f.service.reconcile({ ...event, paymentId: "pi_wrong" });
+  await f.service.reconcile({ ...event, refundId: "re_wrong" });
+  assert.equal(reads, before); assert.equal(f.service.record(held.id).refundSettled, true);
+  await f.service.reconcile(event);
+  assert.equal(reads, before + 1);
+  assert.equal(f.service.record(held.id).refundStatus, "attention_required");
+  assert.equal(f.service.record(held.id).refundSettled, false);
+  assert.ok(f.calls.messages.some(x => x.kind === "operational_alert"));
+  assert.ok(f.calls.messages.some(x => x.kind === "cancellation_refund_pending"));
+  providerStatus = "succeeded";
+  await f.service.reconcile({ ...event, status: "failed" });
+  assert.equal(f.service.record(held.id).refundSettled, true);
+  assert.equal(f.service.record(held.id).refundStatus, "initiated");
+});
+
+test("failed canonical read after a settled-refund webhook remains eligible for alarm recovery", async () => {
+  const f = fixture(), held = await f.hold(); f.pay(held.id); await f.service.drain(); await f.service.cancel(held.id, f.token); await f.service.drain();
+  f.adapters.payments.getRefund = async () => ({ state: "found", refundId: "re_1", status: "succeeded" });
+  await f.service.reconcile(); assert.equal(f.service.record(held.id).refundSettled, true);
+  f.adapters.payments.getRefund = async () => { throw new Error("provider_temporarily_unavailable"); };
+  await f.service.reconcile({ kind: "refund_updated", bookingId: held.id, paymentId: "pi_1", refundId: "re_1" });
+  assert.equal(f.service.record(held.id).refundSettled, false);
+  f.adapters.payments.getRefund = async () => ({ state: "found", refundId: "re_1", status: "failed" });
+  await f.service.reconcile();
+  assert.equal(f.service.record(held.id).refundStatus, "attention_required");
+  assert.ok(f.calls.messages.some(x => x.kind === "operational_alert"));
+});
+
+test("administrator retries only verified terminal refund failure with durable generation and retained history", async () => {
+  const f = fixture(), held = await f.hold(); f.pay(held.id); await f.service.drain();
+  const keys = [];
+  f.adapters.payments.refund = async request => { keys.push(request.idempotencyKey); return { refundId: "re_failed", status: "failed" }; };
+  await f.service.cancel(held.id, f.token); await f.service.drain();
+  assert.equal(f.service.record(held.id).refundStatus, "attention_required");
+  assert.equal(f.calls.messages.some(x => x.kind === "refund_initiated"), false);
+  f.adapters.payments.refundRetryEligibility = async () => ({ eligible: false });
+  await assert.rejects(f.service.resolve(held.id, { action: "retry_refund", reasonCode: "verified_failure_retry" }), /refund_retry_not_verified/);
+  assert.equal(f.service.record(held.id).refundId, "re_failed");
+  f.adapters.payments.refundRetryEligibility = async request => { assert.equal(request.refundId, "re_failed"); return { eligible: true, previousStatus: "failed" }; };
+  await f.service.resolve(held.id, { action: "retry_refund", reasonCode: "verified_failure_retry" });
+  const persisted = new SqliteStore(f.storage).read();
+  assert.equal(persisted.bookings[0].refundHistory[0].refundId, "re_failed");
+  assert.equal(persisted.bookings[0].refundGeneration, 1);
+  assert.ok(persisted.jobs[`${held.id}:refund:1`]);
+  assert.equal(persisted.private[held.id].resolutions.at(-1).previousRefundId, "re_failed");
+  await assert.rejects(f.service.resolve(held.id, { action: "retry_refund", reasonCode: "verified_failure_retry" }), /resolution_state_conflict/);
+  let failOnce = true;
+  f.adapters.payments.refund = async request => { keys.push(request.idempotencyKey); if (failOnce) { failOnce = false; throw new Error("response_unknown"); } return { refundId: "re_new", status: "succeeded" }; };
+  await f.service.drain(); f.setNow("2026-09-28T08:10:00Z"); await f.service.drain();
+  assert.deepEqual(keys, [`${held.id}:refund`, `${held.id}:refund:1`, `${held.id}:refund:1`]);
+  assert.equal(f.service.record(held.id).refundId, "re_new");
+  f.adapters.payments.getRefund = async request => { assert.equal(request.refundId, "re_new"); return { state: "found", refundId: "re_new", status: "succeeded" }; };
+  await f.service.reconcile(); assert.equal(f.service.record(held.id).refundSettled, true);
+  assert.equal(f.calls.messages.filter(x => x.kind === "refund_initiated").length, 1);
+});
+
+test("definitive refund rejection becomes durable attention without endless retries or fake identity", async () => {
+  for (const code of ["http_400", "http_422", "http_503"]) {
+    const f = fixture(), held = await f.hold(); f.pay(held.id); await f.service.drain();
+    let attempts = 0;
+    f.adapters.payments.refund = async () => { attempts++; throw Object.assign(new Error("private provider message"), { code, definitive: code !== "http_503" }); };
+    await f.service.cancel(held.id, f.token); await f.service.drain();
+    const record = f.service.record(held.id), job = f.store.read().jobs[`${held.id}:refund`];
+    assert.equal(record.refundId, undefined);
+    assert.equal(record.refundGeneration, undefined);
+    assert.equal(JSON.stringify(record).includes("private provider message"), false);
+    assert.equal(f.calls.messages.some(x => x.kind === "refund_initiated"), false);
+    if (code === "http_503") {
+      assert.equal(record.refundStatus, "pending"); assert.equal(job.status, "pending");
+      assert.equal(record.retryPending, true);
+    } else {
+      assert.equal(record.refundStatus, "attention_required"); assert.equal(job.status, "done");
+      assert.equal(record.refundRejection.reason, "provider_refund_rejected");
+      assert.equal(record.retryPending, false); assert.equal(record.alertPending, true);
+      assert.ok(f.calls.messages.some(x => x.kind === "cancellation_refund_pending"));
+      assert.ok(f.calls.messages.some(x => x.kind === "operational_alert"));
+      f.setNow("2026-09-28T09:00:00Z"); await f.service.reconcile();
+      assert.equal(attempts, 1);
+    }
+  }
 });
 
 test("initial and recovered refunds requiring action never announce initiation", async () => {

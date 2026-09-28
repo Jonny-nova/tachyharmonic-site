@@ -4,6 +4,37 @@ const { Miniflare, convertV4MiniflareOptions } = require("miniflare");
 const { buildSync } = require("esbuild");
 const path = require("node:path"), fs = require("node:fs"), os = require("node:os");
 
+test("real workerd provider fetch accepts manual redirects and rejects them without following credentials", { timeout: 120000 }, async () => {
+  const source = `
+    import providers from './providers.js'; import google from './google-scheduler.js';
+    export default {async fetch(request) {
+      try {
+        if(new URL(request.url).pathname==='/calendar') {
+          const adapters=providers.createAdapters({GOOGLE_CLIENT_ID:'fixture-client',GOOGLE_CLIENT_SECRET:'fixture-secret',GOOGLE_REFRESH_TOKEN:'fixture-refresh',GOOGLE_CALENDAR_PRIMARY:'primary',GOOGLE_CALENDAR_WORK:'work',GOOGLE_CALENDAR_HOME:'home'});
+          await adapters.calendar.getBusy({startsAt:'2026-10-02T10:00:00Z',endsAt:'2026-10-02T11:00:00Z'});
+        } else {
+          const scheduler=google.createGoogleScheduler({env:{GOOGLE_CALENDAR_PRIMARY:'primary'},ProviderError:providers.ProviderError,fetcher:fetch,googleToken:async()=>'fixture-token',calendar:{},now:Date.now});
+          await scheduler.createAppointment({bookingId:'runtime-probe',startsAt:'2026-10-02T10:00:00Z',durationMinutes:60,name:'Fixture',email:'fixture@example.test'});
+        }
+        return Response.json({unexpectedSuccess:true});
+      }catch(error){return Response.json({code:error.code,definitive:error.definitive});}
+    }};
+  `;
+  const script = buildSync({ stdin: { contents: source, resolveDir: __dirname, sourcefile: "provider-runtime-test.mjs" }, bundle: true, write: false, format: "esm", platform: "browser" }).outputFiles[0].text;
+  const destinations = [];
+  const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script, compatibilityDate: "2026-09-27", outboundService: async request => {
+    destinations.push(new URL(request.url).hostname);
+    return new Response(null, { status: 302, headers: { Location: "https://credential-leak.example.test/" } });
+  } }));
+  try {
+    for (const route of ["calendar", "scheduler"]) {
+      const result = await (await mf.dispatchFetch("https://test.local/" + route)).json();
+      assert.deepEqual(result, { code: "http_302", definitive: false });
+    }
+    assert.deepEqual(destinations, ["oauth2.googleapis.com", "www.googleapis.com"]);
+  } finally { await mf.dispose(); }
+});
+
 test("public terms disclose only the approved current snapshot and fail closed without an address", { timeout: 120000 }, async () => {
   const script = buildSync({ entryPoints: [path.join(__dirname, "worker.mjs")], bundle: true, write: false, format: "esm", platform: "browser", external: ["cloudflare:workers"] }).outputFiles[0].text;
   for (const traderAddress of [undefined, "TEST FIXTURE ONLY, 1 Example Street, Test Town"]) {
@@ -64,7 +95,9 @@ test("real workerd SQLite Durable Object persists rate limits across restart, CO
     response = await mf.dispatchFetch("https://api.example.test/api/holds", { method: "POST", headers: { "Content-Type": "application/json" }, body: "private-note-invalid-json" }); assert.equal(response.status, 400);
     assert.equal((await response.text()).includes("private-note"), false);
     response = await mf.dispatchFetch("https://api.example.test/api/admin/bookings/00000000-0000-0000-0000-000000000000"); assert.equal(response.status, 401);
-    for (let i = 0; i < 57; i++) await mf.dispatchFetch("https://api.example.test/api/health");
+    response = await mf.dispatchFetch("https://api.example.test/api/admin/staging/google-probe", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }); assert.equal(response.status, 401);
+    response = await mf.dispatchFetch("https://api.example.test/api/admin/staging/google-probe", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer private-admin-token" }, body: "{}" }); assert.equal(response.status, 404);
+    for (let i = 0; i < 55; i++) await mf.dispatchFetch("https://api.example.test/api/health");
     await mf.dispose(); mf = new Miniflare(options);
     response = await mf.dispatchFetch("https://api.example.test/api/health"); assert.equal(response.status, 429);
   } finally { if (mf) await mf.dispose(); if (path.dirname(path.resolve(persist)) === path.resolve(os.tmpdir()) && path.basename(persist).startsWith("tachy-booking-do-")) fs.rmSync(persist, { recursive: true, force: true }); }

@@ -31,6 +31,13 @@ test('Google creates one exact paid appointment with private correlation, Meet a
   assert.equal(body.conferenceData.createRequest.requestId,result.appointmentId);assert.equal(new URL(post.url).searchParams.get('conferenceDataVersion'),'1');assert.equal(new URL(post.url).searchParams.get('sendUpdates'),'all');
   assert.ok(!JSON.stringify(f.calls).includes('PRIVATE NOTE'));assert.equal(f.calls.at(-1).init.method,'GET');
 });
+
+test('internal staging probe uses a fixed explicit test label',async()=>{
+  const f=fixture();await f.scheduler.createAppointment({...REQUEST,stagingProbe:true});
+  const body=JSON.parse(f.calls.find(x=>x.init.method==='POST').init.body);
+  assert.equal(body.summary,'STAGING TEST — Tachyharmonic provider verification');
+  assert.match(body.description,/No paid booking or client session/);
+});
 test('stable event ID recovers unknown create and duplicate ID without another appointment',async()=>{
   const f=fixture();f.timeoutAfterInsert=true;await assert.rejects(f.scheduler.createAppointment(REQUEST),e=>!e.definitive);
   const recovered=await f.scheduler.findAppointment(REQUEST);assert.equal(recovered.state,'found');assert.equal(f.calls.filter(x=>x.init.method==='POST').length,1);

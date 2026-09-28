@@ -23,7 +23,8 @@ function createGoogleScheduler({ env, fetcher, googleToken, calendar, ProviderEr
     try { accessToken = await googleToken(); }
     catch { throw Object.assign(new ProviderError('google', 'authorization_unavailable'), { notDispatched: true }); }
     let result;
-    try { result = await fetcher(url, { method, redirect: 'error', signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${accessToken}`, ...(body ? { 'Content-Type': 'application/json' } : {}), ...(etag ? { 'If-Match': etag } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) }); }
+    // workerd supports manual redirects; every 3xx is rejected below.
+    try { result = await fetcher(url, { method, redirect: 'manual', signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${accessToken}`, ...(body ? { 'Content-Type': 'application/json' } : {}), ...(etag ? { 'If-Match': etag } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) }); }
     catch { throw new ProviderError('google', 'response_unknown'); }
     if (allowMissing && [404, 410].includes(result.status)) return null;
     if (allowConflict && result.status === 409) return { conflict: true };
@@ -87,7 +88,7 @@ function createGoogleScheduler({ env, fetcher, googleToken, calendar, ProviderEr
       if (![60, 120].includes(durationMinutes)) throw new ProviderError('google', 'invalid_duration', true);
       const id = await eventId(bookingId);
       await call(`${calendarPath()}/events?conferenceDataVersion=1&sendUpdates=all`, { method: 'POST', allowConflict: true, body: {
-        id, summary: 'Tachyharmonic appointment', description: 'For cancellation or rescheduling, use your private Tachyharmonic booking link or contact jonathan@tachyharmonic.ai. Declining this invitation does not cancel the booking.',
+        id, summary: request.stagingProbe === true ? 'STAGING TEST — Tachyharmonic provider verification' : 'Tachyharmonic appointment', description: request.stagingProbe === true ? 'Temporary sandbox integration test. No paid booking or client session. This event will be removed by the verification check.' : 'For cancellation or rescheduling, use your private Tachyharmonic booking link or contact jonathan@tachyharmonic.ai. Declining this invitation does not cancel the booking.',
         start: { dateTime: new Date(instant(startsAt)).toISOString(), timeZone: 'Europe/London' },
         end: { dateTime: new Date(instant(startsAt) + durationMinutes * 60000).toISOString(), timeZone: 'Europe/London' },
         attendees: [{ email, displayName: name, responseStatus: 'needsAction' }],

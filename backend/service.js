@@ -14,7 +14,7 @@ const equalHash = (a, b) => { if (a.length !== b.length) return false; let diffe
 const noticeKinds = { confirmed: "booking_confirmed", failure: "booking_failed", review: "manual_review_received", refund: "refund_initiated", alert: "operational_alert", pending: "cancellation_refund_pending", canceled: "cancellation_confirmed" };
 const enqueue = (state, id, kind, now) => {
   const record = state.bookings.find(x => x.id === id);
-  const episode = ["notice_alert", "notice_pending"].includes(kind) ? `:${record.status}:${record.refundStatus || "none"}:${record.lastFailureAction || "none"}` : kind === "notice_refund" ? `:${record.refundRecoveryCount || 0}` : kind === "cancel" ? `:${record.cancellationGeneration || 0}` : "";
+  const episode = ["notice_alert", "notice_pending"].includes(kind) ? `:${record.status}:${record.refundStatus || "none"}:${record.lastFailureAction || "none"}${record.refundGeneration ? ":" + record.refundGeneration : ""}` : kind === "notice_refund" ? `:${record.refundRecoveryCount || 0}` : kind === "cancel" ? `:${record.cancellationGeneration || 0}` : kind === "refund" && record.refundGeneration ? `:${record.refundGeneration}` : "";
   const key = `${id}:${kind}${episode}`;
   if (!state.jobs[key]) {
     const snapshot = kind.startsWith("notice_") ? { bookingId: id, kind: noticeKinds[kind.slice(7)], idempotencyKey: key,
@@ -35,6 +35,17 @@ class BookingService {
     catch { throw fail("trader_address_required", 503); }
   }
   record(id) { return this.store.read().bookings.find(x => x.id === id); }
+  recoverySummary(id) {
+    const instant = value => Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
+    const now = Date.parse(this.now());
+    return { pendingJobs: Object.values(this.store.read().jobs).filter(job => job.id === id && job.status !== "done").map(job => ({
+      kind: /^(confirm|cancel|cancel_failed_confirmation|refund|expire|notice_(confirmed|failure|review|refund|alert|pending|canceled))$/.test(job.kind) ? job.kind : "unknown",
+      status: ["pending", "running"].includes(job.status) ? job.status : "unknown",
+      attempts: Number.isSafeInteger(job.attempts) && job.attempts >= 0 ? job.attempts : 0,
+      due: instant(job.due), firstAttemptAt: instant(job.firstAttemptAt),
+      pastAutomaticIdempotencyWindow: (job.kind === "refund" || job.kind.startsWith("notice_")) && now - Date.parse(job.firstAttemptAt) > 23 * 3600000,
+    })) };
+  }
   publicRecord(record) {
     const offer = offerForRate(record.rate);
     return { id: record.id, startsAt: record.startsAt, endsAt: new Date(Date.parse(record.startsAt) + offer.durationMinutes * 60000).toISOString(),
@@ -183,8 +194,29 @@ class BookingService {
     return this.publicRecord(this.record(id));
   }
   async resolve(id, input) {
-    if (!input || Object.keys(input).some(key => !["action", "reasonCode"].includes(key)) || !["retain", "cancel"].includes(input.action) || !/^[a-z0-9_]{3,80}$/.test(input.reasonCode || "")) throw fail("invalid_resolution");
+    if (!input || Object.keys(input).some(key => !["action", "reasonCode"].includes(key)) || !["retain", "cancel", "retry_refund"].includes(input.action) || !/^[a-z0-9_]{3,80}$/.test(input.reasonCode || "")) throw fail("invalid_resolution");
     const record = this.record(id);
+    if (input.action === "retry_refund") {
+      if (!record || record.refundStatus !== "attention_required" || !record.refundId || !record.paymentId || !["booking_failed", "canceled"].includes(record.status)) throw fail("resolution_state_conflict", 409);
+      const verified = await this.adapters.payments.refundRetryEligibility({ paymentId: record.paymentId, bookingId: id, amount: record.rate * 100, refundId: record.refundId });
+      if (verified.eligible !== true || !["failed", "canceled"].includes(verified.previousStatus)) throw fail("refund_retry_not_verified", 409);
+      const now = this.now();
+      this.store.mutate(state => {
+        const current = state.bookings.find(x => x.id === id), secret = state.private[id];
+        if (current.refundId !== record.refundId || current.refundStatus !== "attention_required") throw fail("resolution_state_conflict", 409);
+        current.refundHistory ||= [];
+        current.refundHistory.push({ refundId: current.refundId, status: verified.previousStatus, at: now, generation: current.refundGeneration || 0 });
+        secret.resolutions ||= [];
+        secret.resolutions.push({ action: input.action, reasonCode: input.reasonCode, at: now, providerStatus: verified.previousStatus, previousRefundId: current.refundId });
+        current.refundGeneration = (current.refundGeneration || 0) + 1;
+        current.refundRecoveryCount = (current.refundRecoveryCount || 0) + 1;
+        delete current.refundId;
+        current.refundStatus = "pending"; current.refundSettled = false; current.retryPending = true; current.alertPending = true;
+        enqueue(state, id, "refund", now);
+        this.store.audit(id, "human_resolution_retry_refund", now);
+      });
+      return this.publicRecord(this.record(id));
+    }
     if (!record || !["confirmed", "review_requested"].includes(record.status)) throw fail("resolution_state_conflict", 409);
     const canonical = await this.adapters.scheduler.getAppointment({ appointmentId: record.appointmentId });
     if (!["active", "canceled"].includes(canonical.status)) throw fail("provider_state_unknown", 409);
@@ -214,6 +246,9 @@ class BookingService {
     const now = this.now();
     this.store.mutate(state => {
       for (const record of state.bookings) {
+        const attemptedPending = Object.values(state.jobs).some(job => job.id === record.id && job.status !== "done" && job.attempts > 0);
+        if (record.retryPending && !attemptedPending) record.alertPending = !!(record.externalChangePending || record.refundStatus === "attention_required" || record.status === "review_requested" || record.status === "booking_failed" || record.lastFailureAction);
+        record.retryPending = attemptedPending;
         const secret = state.private[record.id];
         if (record.status === "held" && Date.parse(record.expiresAt) <= Date.parse(now)) {
           record.status = "booking_failed"; record.failureCode = "hold_expired";
@@ -288,11 +323,28 @@ class BookingService {
     } else if (job.kind === "refund") {
       if (r.refundStatus !== "pending") return;
       if (Date.parse(this.now()) - Date.parse(job.firstAttemptAt) > 23 * 3600000) {
-        const found = await this.adapters.payments.getRefund({ paymentId: r.paymentId, bookingId: r.id, amount: r.rate * 100 });
-        if (found.state !== "found" || ["failed", "canceled"].includes(found.status)) throw fail("refund_manual_reconciliation_required", 503);
+        const found = await this.adapters.payments.getRefund({ paymentId: r.paymentId, bookingId: r.id, amount: r.rate * 100, excludeRefundIds: (r.refundHistory || []).map(x => x.refundId) });
+        if (found.state !== "found") throw fail("refund_manual_reconciliation_required", 503);
         this.recordRefundResult(r.id, found); return;
       }
-      const result = await this.adapters.payments.refund({ bookingId: r.id, paymentId: r.paymentId, amount: r.rate * 100, idempotencyKey: job.key });
+      let result;
+      try { result = await this.adapters.payments.refund({ bookingId: r.id, paymentId: r.paymentId, amount: r.rate * 100, idempotencyKey: job.key }); }
+      catch (error) {
+        if (error.definitive !== true || !["http_400", "http_422"].includes(error.code)) throw error;
+        // Stripe rejected this exact attempt without creating a refund. Do not
+        // replay a permanent request failure forever or create a new generation.
+        this.store.mutate(state => {
+          const record = state.bookings.find(x => x.id === r.id);
+          record.refundStatus = "attention_required";
+          record.refundRejection = { reason: "provider_refund_rejected", generation: record.refundGeneration || 0, at: this.now() };
+          record.alertPending = true;
+          delete record.lastFailureAction;
+          enqueue(state, r.id, "notice_pending", this.now());
+          enqueue(state, r.id, "notice_alert", this.now());
+          this.store.audit(r.id, "provider_refund_rejected", this.now());
+        });
+        return;
+      }
       this.recordRefundResult(r.id, result);
     } else if (job.kind === "expire") {
       if (r.paymentId || r.checkoutTerminal) return;
@@ -312,7 +364,7 @@ class BookingService {
       const gate = new BookingGate({ transact: cb => { const output = cb(state.bookings); state.bookings = output.bookings; return output.result; } });
       const recorded = gate.recordRefundInitiated({ id, refundId: result.refundId });
       if (recorded.reason) throw fail(recorded.reason, 409);
-      if (result.status === "requires_action") {
+      if (["requires_action", "failed", "canceled"].includes(result.status)) {
         const record = state.bookings.find(x => x.id === id);
         record.refundStatus = "attention_required";
         record.alertPending = true;
@@ -355,13 +407,11 @@ class BookingService {
         await this.runJob(this.store.read().jobs[job.key]);
         this.store.mutate(state => {
           state.jobs[job.key].status = "done";
-          if (!job.kind.startsWith("notice_")) {
-            const record = state.bookings.find(x => x.id === job.id);
-            const unresolved = Object.values(state.jobs).some(j => j.id === job.id && !j.kind.startsWith("notice_") && j.status !== "done" && j.attempts > 0);
-            record.retryPending = unresolved;
-            record.alertPending = unresolved || record.externalChangePending || record.refundStatus === "attention_required" || record.status === "review_requested" || record.status === "booking_failed";
-            if (!unresolved) delete record.lastFailureAction;
-          }
+          const record = state.bookings.find(x => x.id === job.id);
+          const unresolved = Object.values(state.jobs).some(j => j.id === job.id && j.status !== "done" && j.attempts > 0);
+          record.retryPending = unresolved;
+          record.alertPending = unresolved || record.externalChangePending || record.refundStatus === "attention_required" || record.status === "review_requested" || record.status === "booking_failed";
+          if (!unresolved) delete record.lastFailureAction;
         });
         this.store.audit(job.id, `${job.kind}_completed`, this.now());
       } catch {
@@ -376,13 +426,26 @@ class BookingService {
       this.repairJobs();
     }
   }
-  async reconcile() {
+  async reconcile(refundEvent) {
     const state = this.store.read(), now = Date.parse(this.now());
+    // A later provider failure can follow an earlier succeeded refund. A signed
+    // event wakes only its exact stored correlation; status still comes from a
+    // fresh canonical provider read, never from webhook ordering or payload.
+    const targetedRefund = refundEvent?.kind === "refund_updated" && state.bookings.find(r =>
+      r.id === refundEvent.bookingId && r.paymentId === refundEvent.paymentId && r.refundId === refundEvent.refundId &&
+      typeof r.refundId === "string" && ["initiated", "attention_required"].includes(r.refundStatus));
+    if (targetedRefund) {
+      // Persist the wakeup before contacting Stripe. If that read fails, normal
+      // alarms must keep reconciling after the webhook has been acknowledged.
+      this.store.mutate(s => { s.bookings.find(r => r.id === targetedRefund.id).refundSettled = false; });
+      targetedRefund.refundSettled = false;
+    }
     const candidates = state.bookings.filter(r => (r.checkoutAttemptedAt && !r.paymentId && !r.checkoutTerminal) ||
       (r.appointmentId && ["confirmed", "review_requested"].includes(r.status) && Date.parse(r.startsAt) + DAY > now) ||
       (r.refundId && ["initiated", "attention_required"].includes(r.refundStatus) && !r.refundSettled));
     const cursor = candidates.length ? (state.reconcileCursor || 0) % candidates.length : 0;
     const batch = [...candidates.slice(cursor), ...candidates.slice(0, cursor)].slice(0, 5);
+    if (targetedRefund && !batch.some(r => r.id === targetedRefund.id)) { batch.unshift(targetedRefund); batch.splice(5); }
     this.store.mutate(s => { s.reconcileCursor = candidates.length ? (cursor + batch.length) % candidates.length : 0; });
     for (const r of batch) {
       if (r.checkoutAttemptedAt && !r.checkoutId && !r.paymentId) {
@@ -412,10 +475,10 @@ class BookingService {
           }
         } catch { this.store.audit(r.id, "provider_reconcile_retry", this.now()); }
       }
-      if (r.refundId && ["initiated", "attention_required"].includes(r.refundStatus) && !r.refundSettled) {
-        try { const refund = await this.adapters.payments.getRefund({ paymentId: r.paymentId, bookingId: r.id, amount: r.rate * 100 });
+      if (r.refundId && ["initiated", "attention_required"].includes(r.refundStatus) && (!r.refundSettled || r.id === targetedRefund?.id)) {
+        try { const refund = await this.adapters.payments.getRefund({ paymentId: r.paymentId, bookingId: r.id, amount: r.rate * 100, refundId: r.refundId });
           if (refund.state === "found" && refund.refundId === r.refundId && ["failed", "canceled", "requires_action"].includes(refund.status)) {
-            this.store.mutate(state => { const current = state.bookings.find(x => x.id === r.id); current.refundStatus = "attention_required"; current.alertPending = true; enqueue(state, r.id, "notice_pending", this.now()); });
+            this.store.mutate(state => { const current = state.bookings.find(x => x.id === r.id); current.refundStatus = "attention_required"; current.refundSettled = false; current.alertPending = true; enqueue(state, r.id, "notice_pending", this.now()); });
           }
           if (refund.state === "found" && refund.refundId === r.refundId && ["pending", "succeeded"].includes(refund.status) && r.refundStatus === "attention_required") {
             this.store.mutate(s => { const current = s.bookings.find(x => x.id === r.id); current.refundStatus = "initiated"; current.refundRecoveryCount = (current.refundRecoveryCount || 0) + 1; current.alertPending = false; });

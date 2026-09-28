@@ -84,7 +84,7 @@
       succeeded: "The payment provider reports the refund as completed. Your bank may take time to display it.",
       failed: "The refund has not completed. Jonathan needs to review it; please contact him if you need help.",
       attention_required: "The payment provider reports a problem with the refund. Jonathan needs to review it; refund completion has not been confirmed.",
-    }[record.refundStatus || "none"] || "The refund status needs checking. Please contact Jonathan.";
+    }[record.refundStatus || "none"] ?? "The refund status needs checking. Please contact Jonathan.";
     const meetingUrl = ["confirmed", "review_requested"].includes(record.status) && /^https:\/\/meet\.google\.com\/[a-z-]+$/.test(record.meetingUrl || "") ? record.meetingUrl : null;
     return { title, message, refund, meetingUrl, canPay: record.status === "held" && !expired,
       canCancel: record.status === "confirmed", canRestart: ["booking_failed", "canceled", "confirmed"].includes(record.status),
@@ -287,6 +287,18 @@
     function renderRecord(record) {
       currentRecord = validateRecord(record);
       const view = describeRecord(record);
+      // A Stripe return is a navigation hint, never evidence of payment.
+      const returnedPending = context?.checkoutReturned && record.status === "held";
+      if (returnedPending) {
+        const checks = context.checkoutReturnChecks || 0;
+        view.title = "Checking your payment and appointment";
+        view.message = checks < 10
+          ? "You have returned from Checkout. Payment and the appointment have not yet been verified. Please wait for the result and do not pay again."
+          : "Payment and the appointment have not yet been verified. Automatic checks have paused. Use Check status or contact Jonathan before attempting another payment.";
+        view.canPay = false; view.pending = checks < 10;
+      } else if (context?.checkoutReturned) {
+        const next = { ...context }; delete next.checkoutReturned; delete next.checkoutReturnChecks; save(next);
+      }
       form.hidden = true; el("booking-management").hidden = false;
       el("booking-status-title").textContent = view.title;
       el("booking-status-message").textContent = view.message;
@@ -301,8 +313,11 @@
       el("new-booking").textContent = record.status === "confirmed" ? "Book another appointment" : "Choose another appointment";
       el("booking-last-checked").textContent = "Last checked at " + new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date()) + ".";
       el("cancellation-confirm").hidden = true;
-      clearTimeout(pollTimer);
-      if (view.pending && !doc.hidden) pollTimer = setTimeout(() => refresh(false), 12000);
+      win.clearTimeout(pollTimer);
+      if (view.pending && !doc.hidden) pollTimer = win.setTimeout(() => {
+        if (returnedPending && context?.id === record.id) save({ ...context, checkoutReturnChecks: (context.checkoutReturnChecks || 0) + 1 });
+        return refresh(false);
+      }, 12000);
     }
     async function refresh(focus = false) {
       if (!context?.id || !TOKEN.test(context.token || "")) return;
@@ -313,11 +328,11 @@
         if (!isCurrent(access) || sequence !== statusSequence) return;
         renderRecord(record);
         if (focus) el("booking-status-title").focus();
-      } catch (error) { if (isCurrent(access) && sequence === statusSequence) { clearTimeout(pollTimer); showError(error, true); } }
+      } catch (error) { if (isCurrent(access) && sequence === statusSequence) { win.clearTimeout(pollTimer); showError(error, true); } }
       finally { if (isCurrent(access) && sequence === statusSequence) el("refresh-booking").disabled = false; }
     }
     async function checkout() {
-      if (!termsReady) return;
+      if (!termsReady || context?.checkoutReturned) return;
       const access = { ...context };
       el("resume-checkout").disabled = true; clearError();
       try { const url = await flow.checkout(access); if (isCurrent(access)) win.location.assign(url); }
@@ -389,16 +404,16 @@
     });
     el("new-booking").addEventListener("click", () => {
       if (!currentRecord || !describeRecord(currentRecord).canRestart) return;
-      save(null); statusSequence++; currentRecord = null; clearTimeout(pollTimer); form.hidden = false; el("booking-management").hidden = true;
+      save(null); statusSequence++; currentRecord = null; win.clearTimeout(pollTimer); form.hidden = false; el("booking-management").hidden = true;
       form.reset(); el("intake-note").dispatchEvent(new Event("input"));
       win.history.replaceState(null, "", "#contact"); selectedSlot = null; slots = []; renderSlots(); updateConsent(); updateWeekControls(); form.querySelector('input[name="rate"]').focus();
     });
     doc.addEventListener("visibilitychange", () => {
-      if (doc.hidden) clearTimeout(pollTimer);
+      if (doc.hidden) win.clearTimeout(pollTimer);
       else if (context?.id) refresh(false);
     });
     async function recover() {
-      statusSequence++; clearTimeout(pollTimer);
+      statusSequence++; win.clearTimeout(pollTimer);
       currentRecord = null;
       for (const id of ["resume-checkout", "cancel-booking", "new-booking", "booking-meeting", "cancellation-confirm"]) el(id).hidden = true;
       for (const id of ["booking-summary", "booking-refund", "booking-last-checked"]) el(id).textContent = "";
@@ -418,6 +433,9 @@
         }
         if (context?.id) {
           if (!ID.test(context.id) || !TOKEN.test(context.token || "")) throw new Error("invalid_recovery_link");
+          if (fragment?.id === context.id && new URLSearchParams(win.location.hash.slice(1)).get("checkout") === "returned" && !context.checkoutReturned) {
+            save({ ...context, checkoutReturned: true, checkoutReturnChecks: 0 });
+          }
           form.hidden = true; el("booking-management").hidden = false;
           win.history.replaceState(null, "", "#" + new URLSearchParams({ booking: context.id }));
           await refresh(true);
