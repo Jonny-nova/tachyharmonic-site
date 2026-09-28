@@ -57,6 +57,23 @@ test("public terms disclose only the approved current snapshot and fail closed w
     } finally { await mf.dispose(); }
   }
 });
+test("private live validation hides booking APIs from callers without the test token", { timeout: 120000 }, async () => {
+  const script = buildSync({ entryPoints: [path.join(__dirname, "worker.mjs")], bundle: true, write: false, format: "esm", platform: "browser", external: ["cloudflare:workers"] }).outputFiles[0].text;
+  const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script, compatibilityDate: "2026-09-27",
+    durableObjects: { BOOKING_OFFICE: { className: "BookingOffice", useSQLite: true } },
+    bindings: { BOOKING_ENABLED: "true", PRIVATE_LIVE_TEST: "true", PRIVATE_LIVE_TEST_TOKEN: "fixture-private-live-token", TRADER_ADDRESS: "TEST FIXTURE ONLY, 1 Example Street, Test Town" } }));
+  try {
+    for (const token of [null, "wrong-token"]) {
+      const headers = token ? { "X-Private-Test-Token": token } : {};
+      const response = await mf.dispatchFetch("https://test.local/api/availability?rate=30&startsAt=2026-10-06T10:00:00Z", { headers });
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { error: "not_found" });
+    }
+    const authorized = await mf.dispatchFetch("https://test.local/api/availability?rate=30&startsAt=2026-10-06T10:00:00Z", { headers: { "X-Private-Test-Token": "fixture-private-live-token" } });
+    assert.notEqual(authorized.status, 404);
+    assert.equal((await mf.dispatchFetch("https://test.local/api/health")).status, 200);
+  } finally { await mf.dispose(); }
+});
 test("staging assets are uncacheable and unindexed while all API paths remain in the booking worker", { timeout: 120000 }, async () => {
   const script = buildSync({ entryPoints: [path.join(__dirname, "worker.mjs")], bundle: true, write: false, format: "esm", platform: "browser", external: ["cloudflare:workers"] }).outputFiles[0].text;
   const options = convertV4MiniflareOptions({ modules: true, script, compatibilityDate: "2026-09-27",

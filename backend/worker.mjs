@@ -40,6 +40,13 @@ export class BookingOffice extends DurableObject {
         const url = new URL(request.url), origin = request.headers.get("Origin"), webhook = /^\/api\/webhooks\/(stripe|calendly)$/.test(url.pathname);
         const allowed = (this.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
         if (!webhook && origin && !allowed.includes(origin)) throw fail("origin_denied", 403);
+        // A controlled live validation may enable payment before any public
+        // booking route exists. Require a private operator token even for
+        // requests without an Origin header; Stripe's signed callback is exempt.
+        if (this.env.PRIVATE_LIVE_TEST === "true" && url.pathname.startsWith("/api/") && !["/api/health", "/api/terms"].includes(url.pathname) && !webhook) {
+          const supplied = request.headers.get("X-Private-Test-Token");
+          if (!this.env.PRIVATE_LIVE_TEST_TOKEN || !supplied || await hash(supplied) !== await hash(this.env.PRIVATE_LIVE_TEST_TOKEN)) throw fail("not_found", 404);
+        }
         if (origin && allowed.includes(origin)) cors = { "Access-Control-Allow-Origin": origin, "Vary": "Origin", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Authorization,Content-Type,Idempotency-Key" };
         if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
         if (!webhook) {

@@ -1,6 +1,12 @@
 # Website project memory
 
-## Production launch gate — 28 September 2026
+## Controlled live validation — 28 September 2026
+
+Jonathan separately authorized and personally completed one real £30 Checkout. A temporary private token gate kept the production API inaccessible to public callers during the test. Live Stripe delivered signed Checkout and refund events with HTTP 200; the production booking confirmed with one matching Calendar event and Google Meet link, and Resend marked its actual confirmation Delivered. Controlled cancellation removed the event, released the slot, sent delivered cancellation/refund notices, and created one £30 refund that Stripe reported **succeeded**. No pending recovery jobs, duplicate correlated event or second charge/refund attempt remained. Bank posting can take additional days; the public frontend was not exercised or published.
+
+The ordinary production Worker config is restored at version `33aea075-f72b-413f-8a61-cb42e6c29f76`: `BOOKING_ENABLED=false`, `ALLOW_LIVE_PAYMENTS=false`, public availability 503. The live webhook destination is Disabled. The temporary test token was removed from Cloudflare and the owner-only local bundle. Stripe, Google and Resend production secrets remain installed. See [the production gate record](V1-PRODUCTION-GATE-2026-09-28.md) for bounded evidence and remaining approval. No merge or public launch occurred.
+
+## Pre-validation production launch gate — 28 September 2026 (historical)
 
 Google Auth Platform for the existing `tachyharmonic-booking` project is now **In production** with only `calendar.events.owned` and `calendar.events.freebusy`. Fresh owner consent yielded an offline refresh token; the new grant refreshed successfully with those two scopes and no seven-day Testing expiry field. Primary/Work/Home conflict reads and controlled event/Meet creation, retry identity and cleanup passed locally and on the deployed staging Worker. Staging booking remains enabled for test payments only, its Google token and approved trader address are encrypted secrets, and its provider probe is disabled again.
 
