@@ -1,1 +1,8 @@
 node_modules/
+.wrangler/
+.dev.vars*
+.env*
+!.env.example
+.local/
+dist/
+*.log

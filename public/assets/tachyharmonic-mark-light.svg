@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 39 26" role="img" aria-labelledby="title">
+  <title id="title">Tachyharmonic mark</title>
+  <circle cx="13" cy="13" r="12" fill="none" stroke="oklch(0.24 0.02 60)" stroke-width="2"/>
+  <circle cx="28" cy="11" r="11" fill="oklch(0.58 0.15 40)"/>
+</svg>

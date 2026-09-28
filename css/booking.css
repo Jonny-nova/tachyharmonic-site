@@ -1,0 +1,35 @@
+.booking-panel { min-width: 0; }
+.booking-panel [hidden] { display: none !important; }
+.booking-panel a { text-decoration: underline; text-underline-offset: 3px; }
+.booking-panel input[type="text"], .booking-panel input[type="email"], .booking-panel select {
+  width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: 3px; background: var(--surface); color: var(--ink); font: inherit;
+}
+.booking-details .field-label:not(:first-child) { margin-top: 22px; }
+.booking-panel button:not(.button) {
+  min-height: 44px; padding: 10px 14px; border: 1px solid var(--ink); border-radius: 3px;
+  background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; cursor: pointer;
+}
+.booking-panel button:disabled { opacity: .6; cursor: not-allowed; }
+.booking-panel :is(button, input, select, textarea, a):focus-visible {
+  outline: 3px solid var(--accent-text); outline-offset: 3px;
+}
+.booking-week-controls, .booking-management-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.booking-slots { display: grid; gap: 8px; max-height: 390px; overflow-y: auto; padding: 4px; }
+.booking-slot { border: 1px solid var(--line); border-radius: 3px; padding: 12px; margin: 0; }
+.booking-slot:has(input:checked) { border-color: var(--accent-text); background: var(--bg); }
+.booking-slot:has(input:focus-visible) { outline: 2px solid var(--accent-text); outline-offset: 1px; }
+.booking-panel #slot-status { font-size: 14px; line-height: 1.55; }
+.booking-error { padding: 12px 14px; border-left: 3px solid #9a3324; background: #fff0eb; color: #74271d; font-size: 14px; line-height: 1.55; }
+.booking-management h3 { font-size: clamp(28px, 3vw, 38px); line-height: 1.2; margin-bottom: 18px; }
+.booking-management p { line-height: 1.6; overflow-wrap: anywhere; }
+.booking-management .preview-notice { margin-top: 24px; }
+.booking-management .preview-notice button { margin: 8px 8px 0 0; }
+#new-booking { margin-top: 24px; }
+#early-start-group { margin-top: 18px; padding: 12px; background: var(--bg); }
+@media (max-width: 520px) {
+  .booking-panel .intake-form { padding: 24px 20px; }
+  .booking-week-controls button { flex: 1 1 110px; }
+  .booking-management-actions { flex-direction: column; }
+  .booking-panel .button { width: 100%; white-space: normal; }
+}
