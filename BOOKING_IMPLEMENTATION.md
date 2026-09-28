@@ -1,10 +1,24 @@
 # Booking implementation and launch boundary
 
-Updated 27 September 2026. This describes the integrated code candidate, not a claim that the public site accepts bookings or that the real provider journey has passed. Deployment/account evidence belongs in [project memory](docs/PROJECT_MEMORY.md). The checked-in frontend and backend booking switches remain disabled.
+Updated 28 September 2026. The integrated staging acceptance record is [V1 launch candidate](docs/V1-LAUNCH-CANDIDATE-2026-09-28.md). All five paid sandbox journeys and the deployed recovery matrix have passed; 134 local tests pass. Booking is enabled on staging only, while checked-in frontend/backend defaults remain disabled. Public launch still requires the Google token-lifetime, production configuration and human approval gates in that record.
 
 Jonny explicitly approved replacing Calendly in the V1 controlled booking path with **direct Google Calendar appointments and Google Meet** during this task. The weekly economics and appointment rules in the [booking specification](docs/BOOKING_SYSTEM_SPEC.md) remain authoritative. Earlier Calendly architecture notes are historical; the retained Calendly adapter is not the selected V1 scheduler. The replacement removes a Calendly public scheduling link from this website's journey. It does not itself deactivate unrelated legacy links or prove that other bookings cannot affect Jonathan's workload.
 
-## Continuation checkpoint
+## Current acceptance
+
+Normal staging code is restored after controlled faults. Email recovery is settled with no pending jobs. The deliberately failed Stripe refund test remains explicitly attention-required after a definitive replacement rejection, with no automatic retry loop or false refund claim. Delayed webhook reconciliation, post-cancellation duplicate/out-of-order replay, abandoned/expired Checkout rejection and test cleanup passed. Four superseded Calendly routes were turned off after replacement proof, preserving definitions/history. Final evidence and genuine launch gates are in the [acceptance record](docs/V1-LAUNCH-CANDIDATE-2026-09-28.md).
+
+## Earlier continuation checkpoint — 28 September 2026 (historical)
+
+This checkpoint supersedes the earlier incomplete provider snapshot below. Google OAuth authorization and refresh are verified; the existing client credentials and refresh token are installed as encrypted staging secrets. Staging also stores the sandbox Stripe credentials, webhook secret, transactional sender credentials and Jonathan-approved geographic address. Secrets, private links and the address remain outside tracked evidence. The direct Google Calendar/Meet architecture is unchanged.
+
+All five browser-paid offers (£30, £50, £70, £100 and £140) reached canonical confirmation with matching Google event, attendee, duration, correlation and Meet creation. Each original five-price booking subsequently had its whole event cancelled and a full Stripe sandbox refund reported succeeded. The £70 notification messages have now been reported delivered by the coordinator, but its durable retry flag remains under investigation; delivery does not by itself prove the outbox is settled.
+
+Integrated recovery evidence includes lost Calendar-create-response reconciliation, short-notice review using a booking-scoped staging clock, pending refunds, refund API failure followed by successful recovery, and paid appointment-creation failure followed by automatic refund. A further real Calendar conflict introduced during Checkout produced no appointment and a full refund; the published Stripe failure test method ending 5126 subsequently changed that refund to failed and the backend to `attention_required`. The administrator replacement-refund test is ongoing. Keep this test separate from the five original successful refunds.
+
+The latest coordinator-reported full local suite is **132/132 passing**, with a subsequent targeted diagnostic run **39/39 passing**. Deployed failure tests use temporary staging-only controls; their removal and clean final validation remain required. Delayed-webhook acceptance, stale/expired Checkout completion, final recovery validation, documentation and PR reconciliation are still outstanding. No final integrated pass, candidate push, merge or public launch is claimed. See [dated integration evidence](docs/V1-CANDIDATE-2026-09-27.md) for the preceding checkpoint; its older pending rows are superseded only by the verified updates here.
+
+## Earlier continuation checkpoint — historical
 
 The [finish-integration evidence](docs/V1-CANDIDATE-2026-09-27.md) records current provider setup and its limits. Staging now stores the sandbox key and Jonathan-approved trader address. GET /api/terms supplies the current full contract snapshot and address before payment; unavailable terms block new holds/Checkout while recovery/cancellation remain available. Google consent and actual paid lifecycle are still incomplete; booking remains disabled. The full local suite is 118/118, with actual disabled responsive checks and separately labelled real-provider Checkout/email adapter tests. These are not end-to-end booking acceptance.
 
@@ -40,6 +54,10 @@ The initial capability is held in that browser session. Cross-device email recov
 A controlled request at least 24 hours before the appointment begins whole cancellation. Capacity stays protected until canonical provider cancellation is verified. Both service and Google adapter check the current start/end time; a conditional delete protects against intervening edits. A changed appointment becomes human review instead of applying its old cancellation clock. See Google's [ETag/If-Match mechanism](https://developers.google.com/workspace/calendar/api/guides/version-resources).
 
 After cancellation, release capacity and request the full original Stripe amount. Refund `pending` means creation is unverified; `initiated` means Stripe accepted it, not that funds reached the bank. Later failure or required action becomes `attention_required`; reconciliation continues and can report recovery. An uncertain refund is not blindly repeated after the safe idempotency window.
+
+The authenticated operator resolution `retry_refund` is limited to terminal failed/cancelled bookings with an identified refund requiring attention. Canonical provider eligibility must establish that the previous refund definitively failed or was cancelled and that a replacement is safe; an unknown outcome cannot authorize a new attempt. The durable record retains the prior refund identity/status and operator reason, then advances a refund generation with its own stable idempotency key. The live staging replacement-refund acceptance test remains in progress at this checkpoint.
+
+Administrator-only sanitized recovery diagnostics expose the relevant durable job and audit state for investigation. They are not public booking responses and must not include provider secrets, private management capabilities, intake notes, geographic address or raw provider payloads. Diagnostic reads and passing local diagnostic tests do not establish that a retry has completed.
 
 An under-24-hour request goes to Jonathan for review without automatic cancellation, refund or forfeiture. An authenticated operator may retain the exact active appointment or approve whole cancellation with a recorded reason. Statutory rights remain part of that decision. Final terms and contract formation require Jonathan's review.
 
