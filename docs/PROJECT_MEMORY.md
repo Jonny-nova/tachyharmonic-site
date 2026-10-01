@@ -1,8 +1,12 @@
 # Website project memory
 
+## New V1.1 text companion candidate — 1 October 2026
+
+After rejecting the illustration and card approaches, Jonathan explicitly asked for a local candidate with exactly two lines: “You are not too late to the conversation.” and “Your curiosity and your reservations are both welcome.” The approved existing hero opening, description and actions remain verbatim. The active preview places the unboxed text to the right on desktop and after the opening on phone. This is candidate copy/layout for Jonathan's rendered review, not publication approval. The prior image variants and wording stay recoverable under ignored `.local/hero-revisions/` and absent from the active preview. Pricing treatment, footer links and same-page Contact arrows remain intact; no provider or production state changed.
+
 ## V1.1 hero companion withdrawn — 1 October 2026
 
-Jonathan rejected the image-led hero companion direction after seeing it rendered. The active local preview now uses the original approved opening and hero layout, with no companion image, pale card or circle motif. The earlier artwork variants and provisional wording remain recoverable only under ignored `.local/hero-revisions/`; they are not in the staged public-asset allowlist. The other V1.1 changes—pricing-card consistency, footer legal links and truthful same-page Contact arrows—remain the review candidate. No V1.1 push, merge, deployment or production setting change occurred. Await a new creative direction for the hero.
+Jonathan rejected the image-led hero companion direction after seeing it rendered. The local preview then returned to the original approved opening and hero layout, with no companion image, pale card or circle motif. The earlier artwork variants and provisional wording remain recoverable only under ignored `.local/hero-revisions/`; they are not in the staged public-asset allowlist. The other V1.1 changes—pricing-card consistency, footer legal links and truthful same-page Contact arrows—remained the review candidate. No V1.1 push, merge, deployment or production setting change occurred. Jonathan subsequently requested the new text direction recorded above.
 
 ## Local V1.1 visitor-review candidate — 1 October 2026
 
