@@ -51,12 +51,11 @@ main > section[id] { scroll-margin-top: 84px; }
 
 .hero { padding-block: clamp(90px, 11vw, 156px) clamp(110px, 13vw, 180px); }
 .hero-copy { max-width: 760px; }
-.hero-companion { max-width: 340px; margin-top: 72px; }
-.hero-companion .rule-mark { display: block; margin-bottom: 25px; }
+.hero-companion { max-width: 345px; margin: 72px auto 0; text-align: center; }
 .hero-companion p { margin: 0; }
-.hero-companion-first { font: 400 clamp(30px, 2.9vw, 38px)/1.15 var(--font-display); letter-spacing: -.025em; }
+.hero-companion-first { font: italic 400 clamp(34px, 3vw, 41px)/1.13 var(--font-display); letter-spacing: -.025em; }
 .hero-companion p + p { margin-top: 20px; }
-.hero-companion-second { color: var(--muted); font: 400 18px/1.5 var(--font-text); }
+.hero-companion-second { color: oklch(0.48 0.10 85); font: 400 20px/1.45 var(--font-text); }
 .hero .eyebrow { display: flex; align-items: center; gap: 12px; margin-bottom: 35px; }
 .rule-mark { display: inline-block; width: 24px; height: 2px; background: var(--accent); }
 .hero h1 { max-width: 800px; font-size: clamp(58px, 6.4vw, 94px); line-height: .99; letter-spacing: -.045em; margin-bottom: 32px; }
@@ -281,8 +280,8 @@ main > section[id] { scroll-margin-top: 84px; }
   .wordmark { font-size: 26px; }
   .hero { padding-block: 66px 82px; }
   .hero-companion { margin-top: 56px; }
-  .hero-companion-first { font-size: 32px; }
-  .hero-companion-second { font-size: 16px; }
+  .hero-companion-first { font-size: 34px; }
+  .hero-companion-second { font-size: 18px; }
   .hero .eyebrow { margin-bottom: 25px; }
   .hero h1 { font-size: clamp(48px, 12.2vw, 64px); }
   .hero-description { font-size: 16px; }
