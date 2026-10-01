@@ -1,5 +1,9 @@
 # Website project memory
 
+## V1.1 publication approval and final layout — 1 October 2026
+
+Jonathan approved publication of the bounded V1.1 visitor changes after reviewing the dark-brown reassurance hero. His final correction keeps the brown frame top level with the main headline and aligns the top of the two desktop actions with the top of “Find your footing”. At 1440px and 1181px, rendered deltas are under 0.1px for the action row and under 0.3px for the frame; both actions remain side by side. At 390px the brown bar remains full width, the actions stack naturally, and there is no horizontal overflow. This supersedes the 32px frame-to-action gap recorded below. The publication scope is the hero, pricing-card treatment, footer links to existing legal sections, and truthful same-page Contact arrows. Booking economics, legal text, Worker settings and providers are unchanged. Publication evidence belongs in a separate follow-up entry after the public site is verified.
+
 ## New V1.1 text companion candidate — 1 October 2026
 
 Jonathan's final spacing reference for this local candidate is the actual 32px gap between the main headline and “Find your footing” on the left. The right action row now starts 32px below the unchanged brown frame, using one shared `--hero-heading-follow-gap` value for both sides. This supersedes the earlier headline-height gap and interim 10px/22px trials. At 1440px and 1181px, rendered measurements show 32px on each side, the brown frame top within 0.2px of the main headline top, and both actions still on one row without horizontal overflow. The phone bar/action flow retains its own 26px spacing and remains full width. This is local design review only, not publication or provider/booking work.

@@ -232,7 +232,7 @@ main > section[id] { scroll-margin-top: 84px; }
   .hero { display: grid; grid-template-columns: minmax(0, 760px) minmax(0, 400px); gap: 30px; align-items: stretch; }
   .hero-response { align-items: stretch; justify-content: flex-start; padding-top: 52px; }
   .hero-companion { width: 100%; max-width: 400px; margin: 0; }
-  .hero-actions { flex-wrap: nowrap; justify-content: space-between; gap: 12px; margin-top: var(--hero-heading-follow-gap); }
+  .hero-actions { flex-wrap: nowrap; justify-content: space-between; gap: 12px; margin-top: clamp(16px, calc(12.1vw - 126.5px), 49px); }
   .hero-actions .button { gap: 10px; padding-inline: 14px; font-size: 14px; }
   .hero-actions .text-link { gap: 8px; font-size: 14px; }
 }
