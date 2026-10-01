@@ -51,12 +51,12 @@ main > section[id] { scroll-margin-top: 84px; }
 
 .hero { padding-block: clamp(90px, 11vw, 156px) clamp(110px, 13vw, 180px); }
 .hero-copy { max-width: 760px; }
-.hero-companion { max-width: 345px; margin: 72px auto 0; text-align: center; }
+.hero-companion { max-width: 345px; margin: 72px auto 0; padding: 34px 20px 36px; background: var(--ink); color: var(--surface); text-align: center; }
 .hero-companion p { margin: 0; }
-.hero-companion-first { color: var(--ink); font: 400 clamp(38px, 3.4vw, 48px)/1.13 var(--font-display); letter-spacing: -.025em; }
-.hero-companion-first em { color: var(--accent-text); font-size: 1.025em; font-weight: 400; }
+.hero-companion-first { font: 400 clamp(38px, 3.4vw, 48px)/1.13 var(--font-display); letter-spacing: -.025em; }
+.hero-companion-first em { color: var(--butter); font-size: 1.025em; font-weight: 400; white-space: nowrap; }
 .hero-companion p + p { margin-top: 20px; }
-.hero-companion-second { color: var(--ink); font: 400 20px/1.45 var(--font-text); }
+.hero-companion-second { font: 400 20px/1.45 var(--font-text); }
 .hero .eyebrow { display: flex; align-items: center; gap: 12px; margin-bottom: 35px; }
 .rule-mark { display: inline-block; width: 24px; height: 2px; background: var(--accent); }
 .hero h1 { max-width: 800px; font-size: clamp(58px, 6.4vw, 94px); line-height: .99; letter-spacing: -.045em; margin-bottom: 32px; }
@@ -228,8 +228,12 @@ main > section[id] { scroll-margin-top: 84px; }
 .footer-note { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 22px; margin: 0; color: var(--muted); font-size: 12px; }
 
 @media (min-width: 1181px) {
-  .hero { display: grid; grid-template-columns: minmax(0, 760px) minmax(0, 390px); gap: 30px; align-items: center; }
-  .hero-companion { max-width: 390px; margin-top: 40px; }
+  .hero { display: grid; grid-template-columns: minmax(0, 760px) minmax(0, 400px); gap: 30px; align-items: center; }
+  .hero-companion { max-width: 400px; margin-top: 40px; }
+}
+@media (min-width: 1300px) {
+  .hero { grid-template-columns: minmax(0, 760px) minmax(0, 430px); }
+  .hero-companion { max-width: 430px; }
 }
 @media (max-width: 1000px) {
   .desktop-nav { gap: 14px; }
@@ -280,7 +284,7 @@ main > section[id] { scroll-margin-top: 84px; }
   .shell { width: calc(100% - 34px); }
   .wordmark { font-size: 26px; }
   .hero { padding-block: 66px 82px; }
-  .hero-companion { margin-top: 56px; }
+  .hero-companion { width: calc(100% + 34px); max-width: none; margin: 56px 0 0 -17px; padding-inline: 26px; }
   .hero-companion-first { font-size: 38px; }
   .hero-companion-second { font-size: 18px; }
   .hero .eyebrow { margin-bottom: 25px; }
