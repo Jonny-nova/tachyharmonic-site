@@ -1,10 +1,18 @@
 # Website project memory
 
+## V1.1 hero companion withdrawn — 1 October 2026
+
+Jonathan rejected the image-led hero companion direction after seeing it rendered. The active local preview now uses the original approved opening and hero layout, with no companion image, pale card or circle motif. The earlier artwork variants and provisional wording remain recoverable only under ignored `.local/hero-revisions/`; they are not in the staged public-asset allowlist. The other V1.1 changes—pricing-card consistency, footer legal links and truthful same-page Contact arrows—remain the review candidate. No V1.1 push, merge, deployment or production setting change occurred. Await a new creative direction for the hero.
+
 ## Local V1.1 visitor-review candidate — 1 October 2026
 
 Jonathan authorised a bounded post-launch Codex build for pricing-card consistency, footer entry to existing terms/cancellation/privacy sections, truthful same-page navigation arrows, and a small visitor-recognition panel beside the approved opening. New panel wording and presentation are provisional for review in the rendered layout; approval and publication are separate. The local `review/v1.1-visitor` branch is the candidate target. Production booking economics, provider configuration, public legal policy and the retention work are outside this change. No V1.1 push or deployment is authorised by this handoff.
 
 The disabled local preview was reviewed at 1440px and 390px: the new panel sits beside the opening on desktop and below it on phone, pricing cards keep Standard dark and Solidarity light at both durations, the footer cancellation link reaches its existing section, and neither size showed horizontal overflow. Resource/anchor checks, `git diff --check` and the complete 137-test suite passed. This is a reviewable local candidate, not Jonathan's copy approval or a public deployment.
+
+Jonathan then clarified that the hero companion's visual treatment was the problem: the pale box felt like an instruction card, and its circles had no clear meaning. He suggested an image-led invitation about where the visitor stands amid AI change, holding curiosity and difficulty together without pain-point marketing. An intermediate candidate removed the box and circles and used a transparent, hand-drawn person-at-branching-paths illustration beside the approved opening, with the same provisional wording in semantic HTML beneath it. That direction was subsequently withdrawn as recorded above.
+
+In live review Jonathan initially liked the illustrated direction and refined it: no visible skin or identifiable face, no furtive hooded appearance, and pale routes visually continuous with the warm page surface. The intermediate figure was rear-facing with a light broad hat, covered neck/arms and relaxed stance. The illustration used the page's multiply blending so light path washes took on the actual background colour; a direct transparent-path image edit was rejected locally because it introduced harsh coloured edges. Jonathan then rejected the overall image-led direction. No provider, booking or production setting changed.
 
 ## Retention inventory deployment — 28 September 2026
 
