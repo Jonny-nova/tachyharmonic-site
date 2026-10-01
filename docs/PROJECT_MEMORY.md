@@ -6,6 +6,8 @@ After rejecting the illustration and card approaches, Jonathan explicitly asked 
 
 Jonathan then requested a restrained styling refinement to that local candidate: remove the companion's red rule, centre both sentences in the right-hand hero space, set the first in Newsreader italic, and give the second a darker butter-related colour that remains readable on the page background. The exact two sentences and approved left-hand hero copy stay unchanged. This remains a local review candidate; the live V1 site and booking configuration were not changed.
 
+Jonathan then clarified that the first sentence itself should use the existing regular `--butter` brand colour, without a darker substitute. The local candidate follows that exact colour request. Its contrast on the pale page background needs to be reported honestly in the rendered review; no production change is implied.
+
 ## V1.1 hero companion withdrawn — 1 October 2026
 
 Jonathan rejected the image-led hero companion direction after seeing it rendered. The local preview then returned to the original approved opening and hero layout, with no companion image, pale card or circle motif. The earlier artwork variants and provisional wording remain recoverable only under ignored `.local/hero-revisions/`; they are not in the staged public-asset allowlist. The other V1.1 changes—pricing-card consistency, footer legal links and truthful same-page Contact arrows—remained the review candidate. No V1.1 push, merge, deployment or production setting change occurred. Jonathan subsequently requested the new text direction recorded above.

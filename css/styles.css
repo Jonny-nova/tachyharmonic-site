@@ -53,7 +53,7 @@ main > section[id] { scroll-margin-top: 84px; }
 .hero-copy { max-width: 760px; }
 .hero-companion { max-width: 345px; margin: 72px auto 0; text-align: center; }
 .hero-companion p { margin: 0; }
-.hero-companion-first { font: italic 400 clamp(34px, 3vw, 41px)/1.13 var(--font-display); letter-spacing: -.025em; }
+.hero-companion-first { color: var(--butter); font: italic 400 clamp(34px, 3vw, 41px)/1.13 var(--font-display); letter-spacing: -.025em; }
 .hero-companion p + p { margin-top: 20px; }
 .hero-companion-second { color: oklch(0.48 0.10 85); font: 400 20px/1.45 var(--font-text); }
 .hero .eyebrow { display: flex; align-items: center; gap: 12px; margin-bottom: 35px; }
