@@ -49,16 +49,23 @@ main > section[id] { scroll-margin-top: 84px; }
 .header-contact:hover { border-color: var(--accent-text); }
 .mobile-nav { display: none; }
 
-.hero { padding-block: clamp(90px, 11vw, 156px) clamp(110px, 13vw, 180px); }
+.hero { --hero-heading-follow-gap: 32px; padding-block: clamp(90px, 11vw, 156px) clamp(110px, 13vw, 180px); }
 .hero-copy { max-width: 760px; }
+.hero-response { display: flex; flex-direction: column; align-items: center; }
+.hero-companion { max-width: 345px; margin: 72px auto 0; padding: 34px 20px 36px; background: var(--ink); color: var(--surface); text-align: center; }
+.hero-companion p { margin: 0; }
+.hero-companion-first { font: 400 clamp(38px, 3.4vw, 48px)/1.13 var(--font-display); letter-spacing: -.025em; }
+.hero-companion-first em { color: var(--butter); font-size: 1.025em; font-weight: 400; white-space: nowrap; }
+.hero-companion p + p { margin-top: 20px; }
+.hero-companion-second { font: 400 20px/1.45 var(--font-text); }
 .hero .eyebrow { display: flex; align-items: center; gap: 12px; margin-bottom: 35px; }
 .rule-mark { display: inline-block; width: 24px; height: 2px; background: var(--accent); }
-.hero h1 { max-width: 800px; font-size: clamp(58px, 6.4vw, 94px); line-height: .99; letter-spacing: -.045em; margin-bottom: 32px; }
+.hero h1 { max-width: 800px; font-size: clamp(58px, 6.4vw, 94px); line-height: .99; letter-spacing: -.045em; margin-bottom: var(--hero-heading-follow-gap); }
 .hero h1 br { display: none; }
 .hero h1 em { color: var(--accent-text); font-weight: 400; }
 .hero-lead { font-size: clamp(22px, 2.1vw, 27px); line-height: 1.35; font-weight: 500; margin-bottom: 15px; }
 .hero-description { max-width: 610px; font-size: 18px; color: var(--muted); line-height: 1.65; }
-.hero-actions { display: flex; flex-wrap: wrap; gap: 24px 32px; align-items: center; margin-top: 36px; }
+.hero-actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 18px; width: 100%; margin-top: 28px; }
 .button { display: inline-flex; align-items: center; gap: 30px; min-height: 51px; padding: 12px 20px; border-radius: 3px; font-size: 15px; font-weight: 600; transition: background-color 180ms, color 180ms, border-color 180ms; }
 .button-primary { background: var(--ink); color: var(--surface); }
 .button-primary:hover { background: var(--accent-text); color: var(--surface); }
@@ -217,8 +224,22 @@ main > section[id] { scroll-margin-top: 84px; }
 .footer-inner { display: grid; grid-template-columns: 1fr auto; gap: 45px; }
 .footer-inner > div:first-child p { max-width: 420px; color: var(--muted); font-size: 14px; margin: 15px 0 0; }
 .footer-links { display: flex; flex-wrap: wrap; gap: 10px 22px; align-content: start; font-size: 14px; }
+.footer-links a { text-underline-offset: 4px; }
+.footer-links a:hover { text-decoration: underline; }
 .footer-note { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 22px; margin: 0; color: var(--muted); font-size: 12px; }
 
+@media (min-width: 1181px) {
+  .hero { display: grid; grid-template-columns: minmax(0, 760px) minmax(0, 400px); gap: 30px; align-items: stretch; }
+  .hero-response { align-items: stretch; justify-content: flex-start; padding-top: 52px; }
+  .hero-companion { width: 100%; max-width: 400px; margin: 0; }
+  .hero-actions { flex-wrap: nowrap; justify-content: space-between; gap: 12px; margin-top: clamp(16px, calc(12.1vw - 126.5px), 49px); }
+  .hero-actions .button { gap: 10px; padding-inline: 14px; font-size: 14px; }
+  .hero-actions .text-link { gap: 8px; font-size: 14px; }
+}
+@media (min-width: 1300px) {
+  .hero { grid-template-columns: minmax(0, 760px) minmax(0, 430px); }
+  .hero-companion { max-width: 430px; }
+}
 @media (max-width: 1000px) {
   .desktop-nav { gap: 14px; }
   .desktop-nav a { font-size: 13px; }
@@ -268,10 +289,13 @@ main > section[id] { scroll-margin-top: 84px; }
   .shell { width: calc(100% - 34px); }
   .wordmark { font-size: 26px; }
   .hero { padding-block: 66px 82px; }
+  .hero-companion { width: calc(100% + 34px); max-width: none; margin: 56px 0 0; padding-inline: 26px; }
+  .hero-companion-first { font-size: 38px; }
+  .hero-companion-second { font-size: 18px; }
   .hero .eyebrow { margin-bottom: 25px; }
   .hero h1 { font-size: clamp(48px, 12.2vw, 64px); }
   .hero-description { font-size: 16px; }
-  .hero-actions { align-items: flex-start; flex-direction: column; }
+  .hero-actions { margin-top: 26px; }
   .section { padding-block: 82px; }
   .section-heading h2, .mind-copy h2, .bio-section h2 { font-size: 43px; }
   .section-heading > p:not(.eyebrow) { font-size: 16px; }
