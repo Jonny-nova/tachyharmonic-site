@@ -54,7 +54,7 @@ main > section[id] { scroll-margin-top: 84px; }
 .hero-companion { max-width: 345px; margin: 72px auto 0; text-align: center; }
 .hero-companion p { margin: 0; }
 .hero-companion-first { color: var(--ink); font: 400 clamp(38px, 3.4vw, 48px)/1.13 var(--font-display); letter-spacing: -.025em; }
-.hero-companion-first em { color: var(--butter); font-weight: 400; text-shadow: 0 0 1px rgb(40 31 23 / 65%); }
+.hero-companion-first em { color: var(--accent-text); font-size: 1.025em; font-weight: 400; }
 .hero-companion p + p { margin-top: 20px; }
 .hero-companion-second { color: var(--ink); font: 400 20px/1.45 var(--font-text); }
 .hero .eyebrow { display: flex; align-items: center; gap: 12px; margin-bottom: 35px; }
