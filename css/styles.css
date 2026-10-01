@@ -229,7 +229,7 @@ main > section[id] { scroll-margin-top: 84px; }
 
 @media (min-width: 1181px) {
   .hero { display: grid; grid-template-columns: minmax(0, 760px) minmax(0, 360px); gap: 30px; align-items: center; }
-  .hero-companion { max-width: 335px; margin-top: -40px; }
+  .hero-companion { max-width: 335px; margin-top: 40px; }
 }
 @media (max-width: 1000px) {
   .desktop-nav { gap: 14px; }
