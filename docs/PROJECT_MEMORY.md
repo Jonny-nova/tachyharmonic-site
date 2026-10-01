@@ -1,5 +1,11 @@
 # Website project memory
 
+## Local V1.1 visitor-review candidate — 1 October 2026
+
+Jonathan authorised a bounded post-launch Codex build for pricing-card consistency, footer entry to existing terms/cancellation/privacy sections, truthful same-page navigation arrows, and a small visitor-recognition panel beside the approved opening. New panel wording and presentation are provisional for review in the rendered layout; approval and publication are separate. The local `review/v1.1-visitor` branch is the candidate target. Production booking economics, provider configuration, public legal policy and the retention work are outside this change. No V1.1 push or deployment is authorised by this handoff.
+
+The disabled local preview was reviewed at 1440px and 390px: the new panel sits beside the opening on desktop and below it on phone, pricing cards keep Standard dark and Solidarity light at both durations, the footer cancellation link reaches its existing section, and neither size showed horizontal overflow. Resource/anchor checks, `git diff --check` and the complete 137-test suite passed. This is a reviewable local candidate, not Jonathan's copy approval or a public deployment.
+
 ## Retention inventory deployment — 28 September 2026
 
 Jonathan requested the smallest internal, read-only way to enumerate production booking records for monthly retention review. The implementation adds an administrator-authenticated, no-browser-Origin paged inventory of minimal retention fields. It does not change booking, payment, pricing, public copy or provider behaviour, and it does not delete customer data. Source and local tests are distinct from production deployment and a completed live review. The [retention procedure](BOOKING-DATA-RETENTION.md) describes the operator route and its limits; the [monthly log](BOOKING-RETENTION-REVIEWS.md) preserves the first review's evidence status. V1 has no per-record retention-reason/date write path, so those inventory fields explicitly report unrecorded/null rather than implying a decision.
