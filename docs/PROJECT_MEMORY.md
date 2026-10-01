@@ -8,6 +8,8 @@ Jonathan then requested a restrained styling refinement to that local candidate:
 
 Jonathan then clarified that the first sentence itself should use the existing regular `--butter` brand colour, without a darker substitute. The local candidate follows that exact colour request. Its contrast on the pale page background needs to be reported honestly in the rendered review; no production change is implied.
 
+After seeing that version, Jonathan refined the emphasis: retain the sentence's size and centred position, but use regular dark text for both sentences and reserve the exact regular butter colour and italic styling for “too late” only. The second sentence's wording and position stay unchanged. This supersedes the whole-sentence butter and darker-butter treatments above, remains local only, and has not been published.
+
 ## V1.1 hero companion withdrawn — 1 October 2026
 
 Jonathan rejected the image-led hero companion direction after seeing it rendered. The local preview then returned to the original approved opening and hero layout, with no companion image, pale card or circle motif. The earlier artwork variants and provisional wording remain recoverable only under ignored `.local/hero-revisions/`; they are not in the staged public-asset allowlist. The other V1.1 changes—pricing-card consistency, footer legal links and truthful same-page Contact arrows—remained the review candidate. No V1.1 push, merge, deployment or production setting change occurred. Jonathan subsequently requested the new text direction recorded above.
